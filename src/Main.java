@@ -3,12 +3,8 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Collections;
 
-import static java.awt.image.BufferedImage.TYPE_BYTE_GRAY;
 import static java.awt.image.BufferedImage.TYPE_INT_RGB;
 
 public class Main {
@@ -17,79 +13,80 @@ public class Main {
         File[] trainingFiles = trainingPath.listFiles();
 
         // Read the image pixels
-        BufferedImage firstImage = ImageIO.read(trainingFiles[0]);
-        int width = firstImage.getWidth(), height = firstImage.getHeight();
-
         ArrayList<int[][]> trainingPixels = new ArrayList<>();
-        int[][][] allTrainingPixels = new int[width][height][trainingFiles.length];
-        int countA = 0;
+        ArrayList<double[]> trainingHistograms = new ArrayList<>();
+        int idCount = 0;
 
         for (File trainingFile : trainingFiles) {
-            BufferedImage image = ImageIO.read(trainingFile);
-            int[][] pixels = new int[width][height];
-
-            for (int i = 0; i < width; i++) {
-                for (int j = 0; j < height; j++) {
-                    int pixelValue = image.getRGB(i, j);
-
-                    Color color = new Color(pixelValue, true);
-                    int colourValue = (color.getRed() + color.getGreen() + color.getBlue()) / 3;
-
-                    pixels[i][j] = colourValue;
-                    allTrainingPixels[i][j][countA] = colourValue;
-                }
-            }
-
+            // Get the greyscale pixel values
+            int[][] pixels = getGreyscalePixels(trainingFile);
             trainingPixels.add(pixels);
 
-            System.out.println("Reading image: " + countA);
-            countA++;
+            // Create the histogram
+            double[] histogram = createNormalisedHistogram(pixels);
+            trainingHistograms.add(histogram);
+
+            // Print the results
+            System.out.println("Reading image: " + idCount);
+            createGreyscaleImage(pixels, idCount);
+            idCount++;
         }
+    }
 
-        // Calculate the background
-        int[][] backgroundPixels = new int[width][height];
+    public static int[][] getGreyscalePixels(File file) throws IOException {
+        BufferedImage image = ImageIO.read(file);
+        int width = image.getWidth(), height = image.getHeight();
+        int[][] pixels = new int[width][height];
 
+        // Convert the pixel values to greyscale
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
-                ArrayList<Integer> pixels = new ArrayList<>();
+                Color color = new Color(image.getRGB(i, j), true);
+                int colourValue = (color.getRed() + color.getGreen() + color.getBlue()) / 3;
+                pixels[i][j] = colourValue;
+            }
+        }
+        return pixels;
+    }
 
-                for (int k = 0; k < trainingFiles.length; k++) {
-                    pixels.add(allTrainingPixels[i][j][k]);
-                }
+    public static void createGreyscaleImage(int[][] pixels, int id) throws IOException {
+        int width = pixels.length, height = pixels[0].length;
+        BufferedImage newImage = new BufferedImage(width, height, TYPE_INT_RGB);
 
-                Collections.sort(pixels);
-
-                if (pixels.size() % 2 == 0) {
-                    backgroundPixels[i][j] = pixels.get(pixels.size() / 2) + pixels.get((pixels.size() / 2) - 1);
-                } else {
-                    backgroundPixels[i][j] = pixels.get((pixels.size() - 1) / 2) - 1;
-                }
+        // Convert the pixel values into an image
+        for (int i = 0; i < width; i++) {
+            for (int j = 0; j < height; j++) {
+                newImage.setRGB(i, j, new Color(pixels[i][j], pixels[i][j], pixels[i][j]).getRGB());
             }
         }
 
-        // Remove the backgrounds
-        Files.createDirectories(Paths.get("src/nobackground/training/"));
-        int countB = 0;
+        // Save the image as a file
+        File newFile = new File("src/greyscale/training/", id + ".jpg");
+        newFile.createNewFile();
+        ImageIO.write(newImage, "jpg", newFile);
+    }
 
-        for (int[][] pixels : trainingPixels) {
-            BufferedImage newImage = new BufferedImage(width, height, TYPE_INT_RGB);
+    public static double[] createNormalisedHistogram(int[][] pixels) {
+        int totalPixels = pixels.length * pixels[0].length;
 
-            for (int i = 0; i < width; i++) {
-                for (int j = 0; j < height; j++) {
-                    if ((pixels[i][j] < backgroundPixels[i][j] + 50) && (pixels[i][j] > backgroundPixels[i][j] - 50)) {
-                        newImage.setRGB(i, j, Color.white.getRGB());
-                    } else {
-                        newImage.setRGB(i, j, new Color(pixels[i][j], pixels[i][j], pixels[i][j]).getRGB());
-                    }
-                }
-            }
-
-            File newFile = new File("src/nobackground/training/", countB + ".jpg");
-            newFile.createNewFile();
-            ImageIO.write(newImage, "jpg", newFile);
-
-            System.out.println("Removing background from image: " + countB);
-            countB++;
+        // Create an empty histogram
+        double[] histogram = new double[256];
+        for (int i = 0; i < 256; i++) {
+            histogram[i] = 0;
         }
+
+        // Count the cumulative pixel values
+        for (int[] pixelRow : pixels) {
+            for (int pixel: pixelRow) {
+                histogram[pixel]++;
+            }
+        }
+
+        // Normalise the histogram
+        for (int i = 0; i < histogram.length; i++) {
+            histogram[i] = histogram[i] / totalPixels;
+        }
+
+        return histogram;
     }
 }
