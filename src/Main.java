@@ -8,28 +8,37 @@ import java.util.ArrayList;
 import static java.awt.image.BufferedImage.TYPE_INT_RGB;
 
 public class Main {
+    static final File trainingPath = new File("src/biometrics/training/");
+    static final File testingPath = new File("src/biometrics/testing/");
+    static ArrayList<double[]> trainingHistograms = new ArrayList<>();
+    static ArrayList<double[]> testingHistograms = new ArrayList<>();
+
     public static void main(String[] args) throws IOException {
-        File trainingPath = new File("src/biometrics/training/");
-        File[] trainingFiles = trainingPath.listFiles();
+        // Read the training image pixels
+        extractVectors(trainingPath, trainingHistograms);
 
-        // Read the image pixels
-        ArrayList<int[][]> trainingPixels = new ArrayList<>();
-        ArrayList<double[]> trainingHistograms = new ArrayList<>();
-        int idCount = 0;
+        // Read the testing image pixels
+        extractVectors(testingPath, testingHistograms);
 
-        for (File trainingFile : trainingFiles) {
+        System.out.println(testingHistograms);
+    }
+
+    private static void extractVectors(File path, ArrayList<double[]> histograms) throws IOException {
+        File[] files = path.listFiles();
+        ArrayList<int[][]> allPixels = new ArrayList<>();
+
+        for (File file : files) {
             // Get the greyscale pixel values
-            int[][] pixels = getGreyscalePixels(trainingFile);
-            trainingPixels.add(pixels);
+            int[][] pixels = getGreyscalePixels(file);
+            allPixels.add(pixels);
 
             // Create the histogram
             double[] histogram = createNormalisedHistogram(pixels);
-            trainingHistograms.add(histogram);
+            histograms.add(histogram);
 
             // Print the results
-            System.out.println("Reading image: " + idCount);
-            createGreyscaleImage(pixels, idCount);
-            idCount++;
+            System.out.println("Reading image: " + file.getName());
+            createGreyscaleImage(pixels, file.getName());
         }
     }
 
@@ -49,7 +58,7 @@ public class Main {
         return pixels;
     }
 
-    public static void createGreyscaleImage(int[][] pixels, int id) throws IOException {
+    public static void createGreyscaleImage(int[][] pixels, String fileName) throws IOException {
         int width = pixels.length, height = pixels[0].length;
         BufferedImage newImage = new BufferedImage(width, height, TYPE_INT_RGB);
 
@@ -61,7 +70,7 @@ public class Main {
         }
 
         // Save the image as a file
-        File newFile = new File("src/greyscale/training/", id + ".jpg");
+        File newFile = new File("src/greyscale/training/", fileName + ".jpg");
         newFile.createNewFile();
         ImageIO.write(newImage, "jpg", newFile);
     }
