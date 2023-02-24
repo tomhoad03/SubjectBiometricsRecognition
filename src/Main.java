@@ -22,7 +22,7 @@ public class Main {
         extractVectors(testingPath, testingHistograms);
 
         // Calculate nearest neighbour
-        int trainingCount = 0, testingCount = 0;
+        int trainingCount = 0, testingCount = 0, classifiedCount = 0;
         for (double[] testingHistogram : testingHistograms) {
             double minDistance = -1.0;
             int minDistanceHistogram = 0;
@@ -44,10 +44,17 @@ public class Main {
 
             // Print the results
             String testingName = Objects.requireNonNull(testingPath.listFiles())[testingCount].getName(), trainingName = Objects.requireNonNull(trainingPath.listFiles())[minDistanceHistogram].getName();
-            System.out.println("Calculating nearest neighbour of " + testingName + ": " + trainingName + "which gives a classification score " + classificationTest(testingName, trainingName) + ".");
+            boolean classificationResult = classificationTest(testingName, trainingName);
+            System.out.println("Calculating nearest neighbour of " + testingName + ": " + trainingName + "which gives a classification score " + classificationResult + ".");
+
+            if (classificationResult) {
+                classifiedCount++;
+            }
             trainingCount = 0;
             testingCount++;
         }
+
+        System.out.println("Classification accuracy: " + ((classifiedCount / testingCount) * 100) + "%");
     }
 
     private static void extractVectors(File path, ArrayList<double[]> histograms) throws IOException {
