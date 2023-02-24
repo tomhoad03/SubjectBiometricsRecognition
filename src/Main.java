@@ -4,12 +4,13 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Objects;
 
 import static java.awt.image.BufferedImage.TYPE_INT_RGB;
 
 public class Main {
     static final File trainingPath = new File("src/biometrics/training/");
-    static final File testingPath = new File("src/biometrics/testing/");
+    static final File testingPath = new File("src/biometrics/test/");
     static ArrayList<double[]> trainingHistograms = new ArrayList<>();
     static ArrayList<double[]> testingHistograms = new ArrayList<>();
 
@@ -20,7 +21,33 @@ public class Main {
         // Read the testing image pixels
         extractVectors(testingPath, testingHistograms);
 
-        System.out.println(testingHistograms);
+        // Calculate nearest neighbour
+        int trainingCount = 0, testingCount = 0;
+        for (double[] testingHistogram : testingHistograms) {
+            double minDistance = -1.0;
+            int minDistanceHistogram = 0;
+
+            // Calculate distance to all training histograms
+            for (double[] trainingHistogram : trainingHistograms) {
+                double sum = 0;
+                for (int i = 0; i < trainingHistogram.length; i++) {
+                    sum += Math.pow((testingHistogram[i] - trainingHistogram[i]), 2);
+                }
+                double distance = Math.sqrt(sum);
+
+                if (minDistance < 0 || distance < minDistance) {
+                    minDistance = distance;
+                    minDistanceHistogram = trainingCount;
+                }
+                trainingCount++;
+            }
+
+            // Print the results
+            String testingName = Objects.requireNonNull(testingPath.listFiles())[testingCount].getName(), trainingName = Objects.requireNonNull(trainingPath.listFiles())[minDistanceHistogram].getName();
+            System.out.println("Calculating nearest neighbour of " + testingName + ": " + trainingName + "which gives a classification score " + classificationTest(testingName, trainingName) + ".");
+            trainingCount = 0;
+            testingCount++;
+        }
     }
 
     private static void extractVectors(File path, ArrayList<double[]> histograms) throws IOException {
@@ -70,7 +97,7 @@ public class Main {
         }
 
         // Save the image as a file
-        File newFile = new File("src/greyscale/training/", fileName + ".jpg");
+        File newFile = new File("src/greyscale/", fileName);
         newFile.createNewFile();
         ImageIO.write(newImage, "jpg", newFile);
     }
@@ -97,5 +124,33 @@ public class Main {
         }
 
         return histogram;
+    }
+
+    private static boolean classificationTest(String testName, String trainingName) {
+        return switch (testName) {
+            case "DSC00165.JPG" -> trainingName.equals("021z001ps.jpg");
+            case "DSC00166.JPG" -> trainingName.equals("021z001pf.jpg");
+            case "DSC00167.JPG" -> trainingName.equals("021z002ps.jpg");
+            case "DSC00168.JPG" -> trainingName.equals("021z002pf.jpg");
+            case "DSC00169.JPG" -> trainingName.equals("021z003ps.jpg");
+            case "DSC00170.JPG" -> trainingName.equals("021z003pf.jpg");
+            case "DSC00171.JPG" -> trainingName.equals("021z004ps.jpg");
+            case "DSC00172.JPG" -> trainingName.equals("021z004pf.jpg");
+            case "DSC00173.JPG" -> trainingName.equals("021z005ps.jpg");
+            case "DSC00174.JPG" -> trainingName.equals("021z005pf.jpg");
+            case "DSC00175.JPG" -> trainingName.equals("021z006ps.jpg");
+            case "DSC00176.JPG" -> trainingName.equals("021z006pf.jpg");
+            case "DSC00177.JPG" -> trainingName.equals("021z007ps.jpg");
+            case "DSC00178.JPG" -> trainingName.equals("021z007pf.jpg");
+            case "DSC00179.JPG" -> trainingName.equals("021z008ps.jpg");
+            case "DSC00180.JPG" -> trainingName.equals("021z008pf.jpg");
+            case "DSC00181.JPG" -> trainingName.equals("021z009ps.jpg");
+            case "DSC00182.JPG" -> trainingName.equals("021z009pf.jpg");
+            case "DSC00183.JPG" -> trainingName.equals("021z010ps.jpg");
+            case "DSC00184.JPG" -> trainingName.equals("021z010pf.jpg");
+            case "DSC00185.JPG" -> trainingName.equals("024z011ps.jpg");
+            case "DSC00186.JPG" -> trainingName.equals("024z011pf.jpg");
+            default -> false;
+        };
     }
 }
