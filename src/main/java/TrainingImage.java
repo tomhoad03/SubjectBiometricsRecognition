@@ -1,20 +1,18 @@
-import gnu.trove.list.array.TFloatArrayList;
-import org.openimaj.image.MBFImage;
+import java.util.ArrayList;
 
 public class TrainingImage {
-    private final MBFImage image;
-    private final TFloatArrayList featureVector;
+    private final int id;
+    private final ArrayList<Float> featureVector;
 
-    public TrainingImage(MBFImage image, TFloatArrayList featureVector) {
-        this.image = image;
+    public TrainingImage(int id, ArrayList<Float> featureVector) {
+        this.id = id;
         this.featureVector = featureVector;
     }
 
-    public MBFImage getImage() {
-        return image;
+    public int getId() {
+        return id;
     }
-
-    public TFloatArrayList getFeatureVector() {
+    public ArrayList<Float> getFeatureVector() {
         return featureVector;
     }
 }

@@ -14,8 +14,7 @@ import org.openimaj.util.pair.IntFloatPair;
 
 import java.io.IOException;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class Main {
     public static void main(String[] args) throws IOException {
@@ -23,9 +22,11 @@ public class Main {
         final VFSListDataset<MBFImage> testing = new VFSListDataset<>(Paths.get("").toAbsolutePath() + "\\src\\main\\java\\biometrics\\testing", ImageUtilities.MBFIMAGE_READER);
 
         ArrayList<TrainingImage> featureVectors = new ArrayList<>();
-        int globalCount = 0;
+        int globalCount = 1;
 
         for (MBFImage trainingImage : training) {
+            System.out.println("Training... " + globalCount);
+
             trainingImage = ColourSpace.convert(trainingImage, ColourSpace.CIE_Lab);
             float[][] imageData = trainingImage.getPixelVectorNative(new float[trainingImage.getWidth() * trainingImage.getHeight()][3]);
 
@@ -54,23 +55,34 @@ public class Main {
             // Get the connected components
             GreyscaleConnectedComponentLabeler labeler = new GreyscaleConnectedComponentLabeler();
             List<ConnectedComponent> components = labeler.findComponents(trainingImage.flatten());
-            TFloatArrayList componentFeatureVectors = new TFloatArrayList();
+            ArrayList<Float> componentFeatureVectors = new ArrayList<>();
 
             // Append all component distance vectors
             for (ConnectedComponent component : components) {
                 if (component.calculateArea() > 10000) {
-                    componentFeatureVectors.addAll(component.calculateBoundaryDistanceFromCentre());
+                    TFloatArrayList boundaryDistances = component.calculateBoundaryDistanceFromCentre();
+
+                    float[] sortedBoundaryDistances = boundaryDistances.toArray();
+                    float[] normalisedBoundaryDistances = boundaryDistances.toArray();
+                    Arrays.sort(sortedBoundaryDistances);
+
+                    for (float normalisedBoundaryDistance : normalisedBoundaryDistances) {
+                        componentFeatureVectors.add(normalisedBoundaryDistance / sortedBoundaryDistances[sortedBoundaryDistances.length - 1]);
+                    }
                 }
             }
-            featureVectors.add(new TrainingImage(trainingImage, componentFeatureVectors));
+            featureVectors.add(new TrainingImage(globalCount, componentFeatureVectors));
 
-            System.out.println("Training... " + globalCount);
             globalCount++;
+            trainingImage = ColourSpace.convert(trainingImage, ColourSpace.RGB);
+            DisplayUtilities.display(trainingImage);
         }
 
-        globalCount = 0;
+        globalCount = 1;
 
         for (MBFImage testingImage : testing) {
+            System.out.println("Testing... " + globalCount);
+
             testingImage = ColourSpace.convert(testingImage, ColourSpace.CIE_Lab);
             float[][] imageData = testingImage.getPixelVectorNative(new float[testingImage.getWidth() * testingImage.getHeight()][3]);
 
@@ -99,28 +111,46 @@ public class Main {
             // Get the connected components
             GreyscaleConnectedComponentLabeler labeler = new GreyscaleConnectedComponentLabeler();
             List<ConnectedComponent> components = labeler.findComponents(testingImage.flatten());
-            TFloatArrayList componentFeatureVectors = new TFloatArrayList();
+            ArrayList<Float> componentFeatureVectors = new ArrayList<>();
 
             // Append all component distance vectors
             for (ConnectedComponent component : components) {
                 if (component.calculateArea() > 10000) {
-                    componentFeatureVectors.addAll(component.calculateBoundaryDistanceFromCentre());
+                    TFloatArrayList boundaryDistances = component.calculateBoundaryDistanceFromCentre(); // TODO This size of array is to random and so vectors don't line up
+
+                    float[] sortedBoundaryDistances = boundaryDistances.toArray();
+                    float[] normalisedBoundaryDistances = boundaryDistances.toArray();
+                    Arrays.sort(sortedBoundaryDistances);
+
+                    for (float normalisedBoundaryDistance : normalisedBoundaryDistances) {
+                        componentFeatureVectors.add(normalisedBoundaryDistance / sortedBoundaryDistances[sortedBoundaryDistances.length - 1]);
+                    }
                 }
             }
-
-            System.out.println("Testing... " + globalCount);
 
             float distance = -1;
             int count = 0;
             int closest = 0;
 
             for (TrainingImage trainingImage : featureVectors) {
-                float[] array1 = trainingImage.getFeatureVector().toArray();
-                float[] array2 = componentFeatureVectors.toArray();
-                float sum = 0;
+                ArrayList<Float> trainingFeatureVectors = trainingImage.getFeatureVector();
+                double sum = 0f;
 
-                for (int i = 0; i < array1.length; i++) {
-                    sum += Math.exp(array1[i] - array2[i]);
+                for (int i = 0; i < trainingFeatureVectors.size() + componentFeatureVectors.size(); i++) {
+                    float value1 = 0f, value2 = 0f;
+
+                    if (i < trainingFeatureVectors.size()) {
+                        value1 = trainingFeatureVectors.get(i);
+                    }
+                    if (i < componentFeatureVectors.size()) {
+                        value2 = componentFeatureVectors.get(i);
+                    }
+
+                    if (value1 > 0f || value2 > 0f) {
+                        sum += Math.exp(value1 - value2);
+                    } else {
+                        break;
+                    }
                 }
                 float sqrt = (float) Math.sqrt(sum);
 
@@ -131,10 +161,13 @@ public class Main {
                 count++;
             }
 
-            System.out.println(testingImage + ", " + featureVectors.get(closest).getImage());
+            System.out.println(globalCount + " - " + featureVectors.get(closest).getId() + " - " + distance);
+            globalCount++;
 
             testingImage = ColourSpace.convert(testingImage, ColourSpace.RGB);
             DisplayUtilities.display(testingImage);
         }
+
+        System.out.println("Finished!");
     }
 }
