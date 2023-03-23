@@ -34,9 +34,9 @@ public class Main {
         for (MBFImage trainingImage : training) {
             System.out.println("Training... " + globalCount);
 
-            trainingImage = trainingImage.extractCenter(trainingImage.getWidth() / 2, (trainingImage.getHeight() / 2) + 100, 600, 1200);
+            trainingImage = trainingImage.extractCenter(trainingImage.getWidth() / 2, (trainingImage.getHeight() / 2) + 120, 700, 1250);
             trainingImage = ColourSpace.convert(trainingImage, ColourSpace.CIE_Lab);
-            trainingImage.processInplace(new FFastGaussianConvolve(3, 2));
+            trainingImage.processInplace(new FFastGaussianConvolve(2, 2));
             float[][] imageData = trainingImage.getPixelVectorNative(new float[trainingImage.getWidth() * trainingImage.getHeight()][3]);
 
             // Groups the pixels into their classes
