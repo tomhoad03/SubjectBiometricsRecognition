@@ -12,6 +12,7 @@ import org.openimaj.image.processing.convolution.FFastGaussianConvolve;
 import org.openimaj.image.processing.edges.CannyEdgeDetector;
 import org.openimaj.image.processing.resize.ResizeProcessor;
 import org.openimaj.image.processor.PixelProcessor;
+import org.openimaj.image.typography.hershey.HersheyFont;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
 import org.openimaj.ml.clustering.kmeans.FloatKMeans;
@@ -34,9 +35,10 @@ public class Main {
         for (MBFImage trainingImage : training) {
             System.out.println("Training... " + globalCount);
 
-            trainingImage = trainingImage.extractCenter(trainingImage.getWidth() / 2, (trainingImage.getHeight() / 2) + 120, 700, 1250);
+            trainingImage = trainingImage.extractCenter(trainingImage.getWidth() / 2, (trainingImage.getHeight() / 2) + 120, 720, 1260);
             trainingImage = ColourSpace.convert(trainingImage, ColourSpace.CIE_Lab);
             trainingImage.processInplace(new FFastGaussianConvolve(2, 2));
+
             float[][] imageData = trainingImage.getPixelVectorNative(new float[trainingImage.getWidth() * trainingImage.getHeight()][3]);
 
             // Groups the pixels into their classes
@@ -49,13 +51,13 @@ public class Main {
                 HardAssigner<float[], float[], IntFloatPair> assigner = result.defaultHardAssigner();
 
                 float[] set1 = new float[3];
-                for (int i = 0; i < 3; i++){
+                for (int i = 0; i < 3; i++) {
                     set1[i] = pixel[i];
                 }
                 float[] centroid = centroids[assigner.assign(set1)];
 
                 Float[] set2 = new Float[3];
-                for (int i = 0; i < 3; i++){
+                for (int i = 0; i < 3; i++) {
                     set2[i] = centroid[i];
                 }
                 return set2;
@@ -64,12 +66,27 @@ public class Main {
             trainingImage = ColourSpace.convert(trainingImage, ColourSpace.RGB);
             trainingImage.processInplace(new CannyEdgeDetector());
 
-            ArrayList<Integer[]> coordinates = new ArrayList<>();
+            // Get the connected components
+            GreyscaleConnectedComponentLabeler labeler = new GreyscaleConnectedComponentLabeler();
+            List<ConnectedComponent> components = labeler.findComponents(trainingImage.flatten());
+            ArrayList<Float> componentFeatureVectors = new ArrayList<>();
 
-            for (int y = 0; y < trainingImage.getHeight(); y++) {
-                for(int x = 0; x < trainingImage.getWidth(); x++) {
-                    if (trainingImage.getBand(0).pixels[y][x] == 1 && trainingImage.getBand(1).pixels[y][x] == 1 && trainingImage.getBand(2).pixels[y][x] == 1) {
-                        coordinates.add(new Integer[]{x, y});
+            // Append all component distance vectors
+            for (ConnectedComponent component : components) {
+                if (component.calculateArea() < 50) {
+                    continue;
+                }
+                trainingImage.drawText("Point:", component.calculateCentroidPixel(), HersheyFont.TIMES_MEDIUM, 20);
+
+                if (component.calculateArea() > 10000) {
+                    TFloatArrayList boundaryDistances = component.calculateBoundaryDistanceFromCentre(); // TODO This size of array is to random and so vectors don't line up
+
+                    float[] sortedBoundaryDistances = boundaryDistances.toArray();
+                    float[] normalisedBoundaryDistances = boundaryDistances.toArray();
+                    Arrays.sort(sortedBoundaryDistances);
+
+                    for (float normalisedBoundaryDistance : normalisedBoundaryDistances) {
+                        componentFeatureVectors.add(normalisedBoundaryDistance / sortedBoundaryDistances[sortedBoundaryDistances.length - 1]);
                     }
                 }
             }
