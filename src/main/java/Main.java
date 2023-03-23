@@ -3,7 +3,9 @@ import org.openimaj.data.dataset.VFSListDataset;
 import org.openimaj.image.DisplayUtilities;
 import org.openimaj.image.ImageUtilities;
 import org.openimaj.image.MBFImage;
+import org.openimaj.image.analysis.algorithm.EuclideanDistanceTransform;
 import org.openimaj.image.colour.ColourSpace;
+import org.openimaj.image.colour.RGBColour;
 import org.openimaj.image.connectedcomponent.GreyscaleConnectedComponentLabeler;
 import org.openimaj.image.pixel.ConnectedComponent;
 import org.openimaj.image.pixel.Pixel;
@@ -11,6 +13,7 @@ import org.openimaj.image.pixel.PixelSet;
 import org.openimaj.image.processing.convolution.FFastGaussianConvolve;
 import org.openimaj.image.processing.edges.CannyEdgeDetector;
 import org.openimaj.image.processing.resize.ResizeProcessor;
+import org.openimaj.image.processing.threshold.OtsuThreshold;
 import org.openimaj.image.processor.PixelProcessor;
 import org.openimaj.image.typography.hershey.HersheyFont;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
@@ -20,9 +23,7 @@ import org.openimaj.util.pair.IntFloatPair;
 
 import java.io.IOException;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 public class Main {
     public static void main(String[] args) throws IOException {
@@ -64,21 +65,31 @@ public class Main {
             });
 
             trainingImage = ColourSpace.convert(trainingImage, ColourSpace.RGB);
-            trainingImage.processInplace(new CannyEdgeDetector());
 
             // Get the connected components
             GreyscaleConnectedComponentLabeler labeler = new GreyscaleConnectedComponentLabeler();
             List<ConnectedComponent> components = labeler.findComponents(trainingImage.flatten());
             ArrayList<Float> componentFeatureVectors = new ArrayList<>();
 
+            components.sort(Comparator.comparingInt(PixelSet::calculateArea));
+            Collections.reverse(components);
+
+            trainingImage.processInplace(new CannyEdgeDetector());
+
+            List<Pixel> boundary = components.get(1).getOuterBoundary();
+            trainingImage.fill(RGBColour.BLACK);
+
+            for (Pixel pixel : boundary) {
+                int x = (int) pixel.getX(), y = (int) pixel.getY();
+
+                trainingImage.getBand(0).pixels[y - 1][x - 1] = 1;
+                trainingImage.getBand(1).pixels[y - 1][x - 1] = 1;
+                trainingImage.getBand(2).pixels[y - 1][x - 1] = 1;
+            }
+
             // Append all component distance vectors
             for (ConnectedComponent component : components) {
-                if (component.calculateArea() < 50) {
-                    continue;
-                }
-                trainingImage.drawText("Point:", component.calculateCentroidPixel(), HersheyFont.TIMES_MEDIUM, 20);
-
-                if (component.calculateArea() > 10000) {
+                if (component.calculateArea() > 50) {
                     TFloatArrayList boundaryDistances = component.calculateBoundaryDistanceFromCentre(); // TODO This size of array is to random and so vectors don't line up
 
                     float[] sortedBoundaryDistances = boundaryDistances.toArray();
