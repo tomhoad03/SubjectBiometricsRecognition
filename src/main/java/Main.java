@@ -6,6 +6,11 @@ import org.openimaj.image.MBFImage;
 import org.openimaj.image.colour.ColourSpace;
 import org.openimaj.image.connectedcomponent.GreyscaleConnectedComponentLabeler;
 import org.openimaj.image.pixel.ConnectedComponent;
+import org.openimaj.image.pixel.Pixel;
+import org.openimaj.image.pixel.PixelSet;
+import org.openimaj.image.processing.convolution.FFastGaussianConvolve;
+import org.openimaj.image.processing.edges.CannyEdgeDetector;
+import org.openimaj.image.processing.resize.ResizeProcessor;
 import org.openimaj.image.processor.PixelProcessor;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
@@ -14,7 +19,9 @@ import org.openimaj.util.pair.IntFloatPair;
 
 import java.io.IOException;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class Main {
     public static void main(String[] args) throws IOException {
@@ -27,7 +34,9 @@ public class Main {
         for (MBFImage trainingImage : training) {
             System.out.println("Training... " + globalCount);
 
+            trainingImage = trainingImage.extractCenter(trainingImage.getWidth() / 2, (trainingImage.getHeight() / 2) + 100, 600, 1200);
             trainingImage = ColourSpace.convert(trainingImage, ColourSpace.CIE_Lab);
+            trainingImage.processInplace(new FFastGaussianConvolve(3, 2));
             float[][] imageData = trainingImage.getPixelVectorNative(new float[trainingImage.getWidth() * trainingImage.getHeight()][3]);
 
             // Groups the pixels into their classes
@@ -52,29 +61,20 @@ public class Main {
                 return set2;
             });
 
-            // Get the connected components
-            GreyscaleConnectedComponentLabeler labeler = new GreyscaleConnectedComponentLabeler();
-            List<ConnectedComponent> components = labeler.findComponents(trainingImage.flatten());
-            ArrayList<Float> componentFeatureVectors = new ArrayList<>();
+            trainingImage = ColourSpace.convert(trainingImage, ColourSpace.RGB);
+            trainingImage.processInplace(new CannyEdgeDetector());
 
-            // Append all component distance vectors
-            for (ConnectedComponent component : components) {
-                if (component.calculateArea() > 10000) {
-                    TFloatArrayList boundaryDistances = component.calculateBoundaryDistanceFromCentre();
+            ArrayList<Integer[]> coordinates = new ArrayList<>();
 
-                    float[] sortedBoundaryDistances = boundaryDistances.toArray();
-                    float[] normalisedBoundaryDistances = boundaryDistances.toArray();
-                    Arrays.sort(sortedBoundaryDistances);
-
-                    for (float normalisedBoundaryDistance : normalisedBoundaryDistances) {
-                        componentFeatureVectors.add(normalisedBoundaryDistance / sortedBoundaryDistances[sortedBoundaryDistances.length - 1]);
+            for (int y = 0; y < trainingImage.getHeight(); y++) {
+                for(int x = 0; x < trainingImage.getWidth(); x++) {
+                    if (trainingImage.getBand(0).pixels[y][x] == 1 && trainingImage.getBand(1).pixels[y][x] == 1 && trainingImage.getBand(2).pixels[y][x] == 1) {
+                        coordinates.add(new Integer[]{x, y});
                     }
                 }
             }
-            featureVectors.add(new TrainingImage(globalCount, componentFeatureVectors));
 
             globalCount++;
-            trainingImage = ColourSpace.convert(trainingImage, ColourSpace.RGB);
             DisplayUtilities.display(trainingImage);
         }
 
