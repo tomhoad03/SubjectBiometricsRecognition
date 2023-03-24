@@ -4,14 +4,16 @@ import org.openimaj.image.pixel.ConnectedComponent;
 public class ComputedImage {
     private final int id;
     private final boolean isTraining;
-    private final ConnectedComponent personComponent;
-    private final MBFImage displayImage;
+    private final ConnectedComponent component;
+    private final MBFImage displayImageA;
+    private final MBFImage displayImageB;
 
-    public ComputedImage(int id, boolean isTraining, ConnectedComponent personComponent, MBFImage displayImage) {
+    public ComputedImage(int id, boolean isTraining, ConnectedComponent component, MBFImage displayImageA, MBFImage displayImageB) {
         this.id = id;
         this.isTraining = isTraining;
-        this.personComponent = personComponent;
-        this.displayImage = displayImage;
+        this.component = component;
+        this.displayImageA = displayImageA;
+        this.displayImageB = displayImageB;
     }
 
     public int getId() {
@@ -22,11 +24,15 @@ public class ComputedImage {
         return isTraining;
     }
 
-    public ConnectedComponent getPersonComponent() {
-        return personComponent;
+    public ConnectedComponent getComponent() {
+        return component;
     }
 
-    public MBFImage getDisplayImage() {
-        return displayImage;
+    public MBFImage getDisplayImageA() {
+        return displayImageA;
+    }
+
+    public MBFImage getDisplayImageB() {
+        return displayImageB;
     }
 }

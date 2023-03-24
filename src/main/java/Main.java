@@ -10,6 +10,8 @@ import org.openimaj.image.pixel.Pixel;
 import org.openimaj.image.pixel.PixelSet;
 import org.openimaj.image.processing.convolution.FFastGaussianConvolve;
 import org.openimaj.image.processor.PixelProcessor;
+import org.openimaj.image.segmentation.FelzenszwalbHuttenlocherSegmenter;
+import org.openimaj.image.segmentation.SegmentationUtilities;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
 import org.openimaj.ml.clustering.kmeans.FloatKMeans;
@@ -31,12 +33,8 @@ public class Main {
 
         // Read training images
         for (MBFImage trainingImage : training) {
-            System.out.println("Training... " + count);
-
-            ComputedImage image = computeImage(trainingImage);
-            trainingImages.add(image);
-            DisplayUtilities.display(image.getDisplayImage());
-
+            System.out.println("Reading training... " + count);
+            trainingImages.add(computeImage(trainingImage));
             count++;
         }
 
@@ -44,12 +42,17 @@ public class Main {
 
         // Read testing images
         for (MBFImage testingImage : testing) {
-            System.out.println("Testing... " + count);
+            System.out.println("Reading testing... " + count);
+            testingImages.add(computeImage(testingImage));
+            count++;
+        }
 
-            ComputedImage image = computeImage(testingImage);
-            testingImages.add(image);
-            DisplayUtilities.display(image.getDisplayImage());
+        count = 1;
 
+        // Training the classifier
+        for (ComputedImage trainingImage : trainingImages) {
+            System.out.println("Training... " + count);
+            DisplayUtilities.display(trainingImage.getDisplayImageB());
             count++;
         }
 
@@ -59,7 +62,7 @@ public class Main {
     static ComputedImage computeImage(MBFImage image) {
         // Resize and crop the image
         image = image.extractCenter(image.getWidth() / 2, (image.getHeight() / 2) + 120, 720, 1260);
-        MBFImage clonedImage = image.clone();
+        MBFImage clonedImageA = image.clone(), clonedImageB = image.clone();
 
         // Apply a Gaussian blur to reduce noise
         image = ColourSpace.convert(image, ColourSpace.CIE_Lab);
@@ -101,20 +104,26 @@ public class Main {
         ConnectedComponent personComponent = components.get(1);
 
         // Get the boundary pixels and all contained pixels
-        List<Pixel> boundary = personComponent.getOuterBoundary();
         Set<Pixel> pixels = personComponent.getPixels();
 
         // Remove all unnecessary pixels from image
-        for (int y = 0; y < clonedImage.getHeight(); y++) {
-            for (int x = 0; x < clonedImage.getWidth(); x++) {
+        for (int y = 0; y < clonedImageA.getHeight(); y++) {
+            for (int x = 0; x < clonedImageA.getWidth(); x++) {
                 if (!pixels.contains(new Pixel(x, y))) {
-                    clonedImage.getBand(0).pixels[y][x] = 1;
-                    clonedImage.getBand(1).pixels[y][x] = 1;
-                    clonedImage.getBand(2).pixels[y][x] = 1;
+                    clonedImageA.getBand(0).pixels[y][x] = 0;
+                    clonedImageA.getBand(1).pixels[y][x] = 0;
+                    clonedImageA.getBand(2).pixels[y][x] = 0;
+                    clonedImageB.getBand(0).pixels[y][x] = 1;
+                    clonedImageB.getBand(1).pixels[y][x] = 1;
+                    clonedImageB.getBand(2).pixels[y][x] = 1;
+                } else {
+                    clonedImageA.getBand(0).pixels[y][x] = 1;
+                    clonedImageA.getBand(1).pixels[y][x] = 1;
+                    clonedImageA.getBand(2).pixels[y][x] = 1;
                 }
             }
         }
 
-        return new ComputedImage(count, true, personComponent, clonedImage);
+        return new ComputedImage(count, true, personComponent, clonedImageA, clonedImageB);
     }
 }
