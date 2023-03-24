@@ -1,3 +1,4 @@
+import org.checkerframework.checker.units.qual.C;
 import org.openimaj.data.dataset.VFSListDataset;
 import org.openimaj.image.DisplayUtilities;
 import org.openimaj.image.ImageUtilities;
@@ -19,79 +20,101 @@ import java.nio.file.Paths;
 import java.util.*;
 
 public class Main {
+    static int count = 1;
+
     public static void main(String[] args) throws IOException {
         final VFSListDataset<MBFImage> training = new VFSListDataset<>(Paths.get("").toAbsolutePath() + "\\src\\main\\java\\biometrics\\training", ImageUtilities.MBFIMAGE_READER);
         final VFSListDataset<MBFImage> testing = new VFSListDataset<>(Paths.get("").toAbsolutePath() + "\\src\\main\\java\\biometrics\\testing", ImageUtilities.MBFIMAGE_READER);
 
-        int globalCount = 1;
+        ArrayList<ComputedImage> trainingImages = new ArrayList<>();
+        ArrayList<ComputedImage> testingImages = new ArrayList<>();
 
+        // Read training images
         for (MBFImage trainingImage : training) {
-            System.out.println("Training... " + globalCount);
+            System.out.println("Training... " + count);
 
-            // Resize and crop the image
-            trainingImage = trainingImage.extractCenter(trainingImage.getWidth() / 2, (trainingImage.getHeight() / 2) + 120, 720, 1260);
-            MBFImage clonedTrainingImage = trainingImage.clone();
+            ComputedImage image = computeImage(trainingImage);
+            trainingImages.add(image);
+            DisplayUtilities.display(image.getDisplayImage());
 
-            // Apply a Guassian blur to reduce noise
-            trainingImage = ColourSpace.convert(trainingImage, ColourSpace.CIE_Lab);
-            trainingImage.processInplace(new FFastGaussianConvolve(2, 2));
+            count++;
+        }
 
-            // Get the pixel data
-            float[][] imageData = trainingImage.getPixelVectorNative(new float[trainingImage.getWidth() * trainingImage.getHeight()][3]);
+        count = 1;
 
-            // Groups the pixels into their classes
-            FloatKMeans cluster = FloatKMeans.createExact(2);
-            FloatCentroidsResult result = cluster.cluster(imageData);
-            float[][] centroids = result.centroids;
+        // Read testing images
+        for (MBFImage testingImage : testing) {
+            System.out.println("Testing... " + count);
 
-            // Assigns pixels to a class
-            trainingImage.processInplace((PixelProcessor<Float[]>) pixel -> {
-                HardAssigner<float[], float[], IntFloatPair> assigner = result.defaultHardAssigner();
+            ComputedImage image = computeImage(testingImage);
+            testingImages.add(image);
+            DisplayUtilities.display(image.getDisplayImage());
 
-                float[] set1 = new float[3];
-                for (int i = 0; i < 3; i++) {
-                    set1[i] = pixel[i];
-                }
-                float[] centroid = centroids[assigner.assign(set1)];
-
-                Float[] set2 = new Float[3];
-                for (int i = 0; i < 3; i++) {
-                    set2[i] = centroid[i];
-                }
-                return set2;
-            });
-            trainingImage = ColourSpace.convert(trainingImage, ColourSpace.RGB);
-
-            // Get the two connected components
-            GreyscaleConnectedComponentLabeler labeler = new GreyscaleConnectedComponentLabeler();
-            List<ConnectedComponent> components = labeler.findComponents(trainingImage.flatten());
-            ArrayList<Float> componentFeatureVectors = new ArrayList<>();
-
-            // Get the person component
-            components.sort(Comparator.comparingInt(PixelSet::calculateArea));
-            Collections.reverse(components);
-            ConnectedComponent personComponent = components.get(1);
-
-            // Get the boundary pixels and all contained pixels
-            List<Pixel> boundary = personComponent.getOuterBoundary();
-            Set<Pixel> pixels = personComponent.getPixels();
-
-            // Remove all unnecessary pixels from image
-            for (int y = 0; y < clonedTrainingImage.getHeight(); y++) {
-                for (int x = 0; x < clonedTrainingImage.getWidth(); x++) {
-                    if (!pixels.contains(new Pixel(x, y))) {
-                        clonedTrainingImage.getBand(0).pixels[y][x] = 1;
-                        clonedTrainingImage.getBand(1).pixels[y][x] = 1;
-                        clonedTrainingImage.getBand(2).pixels[y][x] = 1;
-                    }
-                }
-            }
-
-            // Example display of image
-            globalCount++;
-            DisplayUtilities.display(clonedTrainingImage);
+            count++;
         }
 
         System.out.println("Finished!");
+    }
+
+    static ComputedImage computeImage(MBFImage image) {
+        // Resize and crop the image
+        image = image.extractCenter(image.getWidth() / 2, (image.getHeight() / 2) + 120, 720, 1260);
+        MBFImage clonedImage = image.clone();
+
+        // Apply a Gaussian blur to reduce noise
+        image = ColourSpace.convert(image, ColourSpace.CIE_Lab);
+        image.processInplace(new FFastGaussianConvolve(2, 2));
+
+        // Get the pixel data
+        float[][] imageData = image.getPixelVectorNative(new float[image.getWidth() * image.getHeight()][3]);
+
+        // Groups the pixels into their classes
+        FloatKMeans cluster = FloatKMeans.createExact(2);
+        FloatCentroidsResult result = cluster.cluster(imageData);
+        float[][] centroids = result.centroids;
+
+        // Assigns pixels to a class
+        image.processInplace((PixelProcessor<Float[]>) pixel -> {
+            HardAssigner<float[], float[], IntFloatPair> assigner = result.defaultHardAssigner();
+
+            float[] set1 = new float[3];
+            for (int i = 0; i < 3; i++) {
+                set1[i] = pixel[i];
+            }
+            float[] centroid = centroids[assigner.assign(set1)];
+
+            Float[] set2 = new Float[3];
+            for (int i = 0; i < 3; i++) {
+                set2[i] = centroid[i];
+            }
+            return set2;
+        });
+        image = ColourSpace.convert(image, ColourSpace.RGB);
+
+        // Get the two connected components
+        GreyscaleConnectedComponentLabeler labeler = new GreyscaleConnectedComponentLabeler();
+        List<ConnectedComponent> components = labeler.findComponents(image.flatten());
+
+        // Get the person component
+        components.sort(Comparator.comparingInt(PixelSet::calculateArea));
+        Collections.reverse(components);
+        ConnectedComponent personComponent = components.get(1);
+
+        // Get the boundary pixels and all contained pixels
+        List<Pixel> boundary = personComponent.getOuterBoundary();
+        Set<Pixel> pixels = personComponent.getPixels();
+
+        // Remove all unnecessary pixels from image
+        for (int y = 0; y < clonedImage.getHeight(); y++) {
+            for (int x = 0; x < clonedImage.getWidth(); x++) {
+                if (!pixels.contains(new Pixel(x, y))) {
+                    clonedImage.getBand(0).pixels[y][x] = 1;
+                    clonedImage.getBand(1).pixels[y][x] = 1;
+                    clonedImage.getBand(2).pixels[y][x] = 1;
+                }
+            }
+        }
+
+        return new ComputedImage(count, true, personComponent, clonedImage);
     }
 }
