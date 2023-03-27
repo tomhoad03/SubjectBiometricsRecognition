@@ -1,6 +1,8 @@
 import org.openimaj.data.dataset.VFSListDataset;
 import org.openimaj.feature.ByteFV;
 import org.openimaj.feature.ByteFVComparison;
+import org.openimaj.feature.SparseIntFV;
+import org.openimaj.feature.SparseIntFVComparison;
 import org.openimaj.feature.local.list.LocalFeatureList;
 import org.openimaj.image.ImageUtilities;
 import org.openimaj.image.MBFImage;
@@ -17,7 +19,6 @@ import org.openimaj.image.processor.PixelProcessor;
 import org.openimaj.ml.clustering.FeatureVectorCentroidsResult;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
-import org.openimaj.ml.clustering.kmeans.ByteKMeans;
 import org.openimaj.ml.clustering.kmeans.FeatureVectorKMeans;
 import org.openimaj.ml.clustering.kmeans.FloatKMeans;
 import org.openimaj.util.pair.IntFloatPair;
@@ -28,6 +29,7 @@ import java.util.*;
 
 public class Main {
     static int count = 1;
+    static int classificationCount = 0;
 
     public static void main(String[] args) throws IOException {
         final VFSListDataset<MBFImage> training = new VFSListDataset<>(Paths.get("").toAbsolutePath() + "\\src\\main\\java\\biometrics\\training", ImageUtilities.MBFIMAGE_READER);
@@ -60,6 +62,7 @@ public class Main {
         FeatureVectorKMeans<ByteFV> kMeans = FeatureVectorKMeans.createExact(500, ByteFVComparison.EUCLIDEAN);
         FeatureVectorCentroidsResult<ByteFV> result = kMeans.cluster(featuresList);
         HardAssigner<ByteFV, float[], IntFloatPair> assigner = result.defaultHardAssigner();
+        ArrayList<SparseIntFV> extractedFeatures = new ArrayList<>();
 
         // Training the classifier
         for (ComputedImage trainingImage : trainingImages) {
@@ -67,9 +70,29 @@ public class Main {
 
             // Creates a BoVW for the image
             BagOfVisualWords bagOfVisualWords = new BagOfVisualWords(assigner);
-            bagOfVisualWords.aggregateVectorsRaw(extractFeatures(engine, trainingImage));
+            extractedFeatures.add(bagOfVisualWords.aggregateVectorsRaw(extractFeatures(engine, trainingImage)));
             count++;
         }
+        count = 1;
+
+        // K-Means clusters bags of visual words
+        FeatureVectorKMeans<SparseIntFV> kMeans2 = FeatureVectorKMeans.createExact(44, SparseIntFVComparison.EUCLIDEAN);
+        FeatureVectorCentroidsResult<SparseIntFV> result2 = kMeans2.cluster(extractedFeatures);
+        SparseIntFV[] centroids = result2.centroids;
+        HardAssigner assigner2 = result.defaultHardAssigner();
+
+        // Finding out the classifier accuracy
+        for (SparseIntFV extractedFeaturesImage : extractedFeatures) {
+            System.out.println("Training... " + count);
+            SparseIntFV centroid = centroids[assigner2.assign(extractedFeaturesImage)];
+
+            if (centroid == extractedFeaturesImage) {
+                classificationCount++;
+            }
+
+            count++;
+        }
+        count = 1;
 
         // Read testing images
         for (MBFImage testingImage : testing) {
@@ -80,6 +103,7 @@ public class Main {
         count = 1;
 
         System.out.println("Finished!");
+        System.out.println("Classification accuracy = " + (classificationCount / 88));
     }
 
     static ComputedImage computeImage(MBFImage image) {
