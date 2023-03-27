@@ -83,7 +83,7 @@ public class Main {
 
         // Finding out the classifier accuracy
         for (SparseIntFV extractedFeaturesImage : extractedFeatures) {
-            System.out.println("Training... " + count);
+            System.out.println("Classifying training... " + count);
             SparseIntFV centroid = centroids[assigner2.assign(extractedFeaturesImage)];
 
             if (centroid == extractedFeaturesImage) {
@@ -103,7 +103,7 @@ public class Main {
         count = 1;
 
         System.out.println("Finished!");
-        System.out.println("Classification accuracy = " + (classificationCount / 88));
+        System.out.println("Classification accuracy = " + ((classificationCount / 88) * 100) + "%");
     }
 
     static ComputedImage computeImage(MBFImage image) {
