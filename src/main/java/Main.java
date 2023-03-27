@@ -41,7 +41,6 @@ public class Main {
             trainingImages.add(computeImage(trainingImage));
             count++;
         }
-
         count = 1;
 
         // Read testing images
@@ -50,20 +49,21 @@ public class Main {
             testingImages.add(computeImage(testingImage));
             count++;
         }
-
         count = 1;
 
         // Trains the assigner from a training sample
-        List<ComputedImage> subTrainingImages = trainingImages.subList(0, 20);
+        List<ComputedImage> subTrainingImages = trainingImages.subList(0, 22);
         ArrayList<ByteFV> featuresList = new ArrayList<>();
         DoGSIFTEngine engine = new DoGSIFTEngine();
 
         for (ComputedImage trainingImage : subTrainingImages) {
+            System.out.println("Sampling training... " + count);
             featuresList.addAll(extractFeatures(engine, trainingImage));
         }
+        count = 1;
 
         // K-Means clusters sampled features
-        FeatureVectorKMeans<ByteFV> kMeans = FeatureVectorKMeans.createExact(5, ByteFVComparison.EUCLIDEAN);
+        FeatureVectorKMeans<ByteFV> kMeans = FeatureVectorKMeans.createExact(500, ByteFVComparison.EUCLIDEAN);
         FeatureVectorCentroidsResult<ByteFV> result = kMeans.cluster(featuresList);
         HardAssigner<ByteFV, float[], IntFloatPair> assigner = result.defaultHardAssigner();
 
