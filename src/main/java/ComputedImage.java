@@ -5,15 +5,13 @@ public class ComputedImage {
     private final int id;
     private final boolean isTraining;
     private final ConnectedComponent component;
-    private final MBFImage displayImageA;
-    private final MBFImage displayImageB;
+    private final MBFImage image;
 
-    public ComputedImage(int id, boolean isTraining, ConnectedComponent component, MBFImage displayImageA, MBFImage displayImageB) {
+    public ComputedImage(int id, boolean isTraining, ConnectedComponent component, MBFImage image) {
         this.id = id;
         this.isTraining = isTraining;
         this.component = component;
-        this.displayImageA = displayImageA;
-        this.displayImageB = displayImageB;
+        this.image = image;
     }
 
     public int getId() {
@@ -28,11 +26,7 @@ public class ComputedImage {
         return component;
     }
 
-    public MBFImage getDisplayImageA() {
-        return displayImageA;
-    }
-
-    public MBFImage getDisplayImageB() {
-        return displayImageB;
+    public MBFImage getImage() {
+        return image;
     }
 }

@@ -1,19 +1,23 @@
-import org.checkerframework.checker.units.qual.C;
 import org.openimaj.data.dataset.VFSListDataset;
-import org.openimaj.image.DisplayUtilities;
+import org.openimaj.feature.ByteFV;
+import org.openimaj.feature.ByteFVComparison;
+import org.openimaj.feature.local.list.LocalFeatureList;
 import org.openimaj.image.ImageUtilities;
 import org.openimaj.image.MBFImage;
 import org.openimaj.image.colour.ColourSpace;
 import org.openimaj.image.connectedcomponent.GreyscaleConnectedComponentLabeler;
+import org.openimaj.image.feature.local.aggregate.BagOfVisualWords;
+import org.openimaj.image.feature.local.engine.DoGSIFTEngine;
+import org.openimaj.image.feature.local.keypoints.Keypoint;
 import org.openimaj.image.pixel.ConnectedComponent;
 import org.openimaj.image.pixel.Pixel;
 import org.openimaj.image.pixel.PixelSet;
 import org.openimaj.image.processing.convolution.FFastGaussianConvolve;
 import org.openimaj.image.processor.PixelProcessor;
-import org.openimaj.image.segmentation.FelzenszwalbHuttenlocherSegmenter;
-import org.openimaj.image.segmentation.SegmentationUtilities;
+import org.openimaj.ml.clustering.FeatureVectorCentroidsResult;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
+import org.openimaj.ml.clustering.kmeans.FeatureVectorKMeans;
 import org.openimaj.ml.clustering.kmeans.FloatKMeans;
 import org.openimaj.util.pair.IntFloatPair;
 
@@ -49,10 +53,27 @@ public class Main {
 
         count = 1;
 
+        // Trains the assigner from a training sample
+        List<ComputedImage> subTrainingImages = trainingImages.subList(0, 20);
+        ArrayList<ByteFV> featuresList = new ArrayList<>();
+        DoGSIFTEngine engine = new DoGSIFTEngine();
+
+        for (ComputedImage trainingImage : subTrainingImages) {
+            featuresList.addAll(extractFeatures(engine, trainingImage));
+        }
+
+        // K-Means clusters sampled features
+        FeatureVectorKMeans<ByteFV> kMeans = FeatureVectorKMeans.createExact(5, ByteFVComparison.EUCLIDEAN);
+        FeatureVectorCentroidsResult<ByteFV> result = kMeans.cluster(featuresList);
+        HardAssigner<ByteFV, float[], IntFloatPair> assigner = result.defaultHardAssigner();
+
         // Training the classifier
         for (ComputedImage trainingImage : trainingImages) {
             System.out.println("Training... " + count);
-            DisplayUtilities.display(trainingImage.getDisplayImageB());
+
+            // Creates a BoVW for the image
+            BagOfVisualWords bagOfVisualWords = new BagOfVisualWords(assigner);
+            bagOfVisualWords.aggregateVectorsRaw(extractFeatures(engine, trainingImage));
             count++;
         }
 
@@ -62,7 +83,7 @@ public class Main {
     static ComputedImage computeImage(MBFImage image) {
         // Resize and crop the image
         image = image.extractCenter(image.getWidth() / 2, (image.getHeight() / 2) + 120, 720, 1260);
-        MBFImage clonedImageA = image.clone(), clonedImageB = image.clone();
+        MBFImage clonedImage = image.clone();
 
         // Apply a Gaussian blur to reduce noise
         image = ColourSpace.convert(image, ColourSpace.CIE_Lab);
@@ -107,23 +128,27 @@ public class Main {
         Set<Pixel> pixels = personComponent.getPixels();
 
         // Remove all unnecessary pixels from image
-        for (int y = 0; y < clonedImageA.getHeight(); y++) {
-            for (int x = 0; x < clonedImageA.getWidth(); x++) {
+        for (int y = 0; y < clonedImage.getHeight(); y++) {
+            for (int x = 0; x < clonedImage.getWidth(); x++) {
                 if (!pixels.contains(new Pixel(x, y))) {
-                    clonedImageA.getBand(0).pixels[y][x] = 0;
-                    clonedImageA.getBand(1).pixels[y][x] = 0;
-                    clonedImageA.getBand(2).pixels[y][x] = 0;
-                    clonedImageB.getBand(0).pixels[y][x] = 1;
-                    clonedImageB.getBand(1).pixels[y][x] = 1;
-                    clonedImageB.getBand(2).pixels[y][x] = 1;
-                } else {
-                    clonedImageA.getBand(0).pixels[y][x] = 1;
-                    clonedImageA.getBand(1).pixels[y][x] = 1;
-                    clonedImageA.getBand(2).pixels[y][x] = 1;
+                    clonedImage.getBand(0).pixels[y][x] = 1;
+                    clonedImage.getBand(1).pixels[y][x] = 1;
+                    clonedImage.getBand(2).pixels[y][x] = 1;
                 }
             }
         }
 
-        return new ComputedImage(count, true, personComponent, clonedImageA, clonedImageB);
+        return new ComputedImage(count, true, personComponent, clonedImage);
+    }
+
+    // Extracts SIFT descriptors from image (invariant to S+T+R)
+    static ArrayList<ByteFV> extractFeatures(DoGSIFTEngine engine, ComputedImage image) {
+        ArrayList<ByteFV> featuresList = new ArrayList<>();
+        LocalFeatureList<Keypoint> keypointList = engine.findFeatures(image.getImage().flatten());
+
+        for (Keypoint keypoint : keypointList) {
+            featuresList.add(keypoint.getFeatureVector());
+        }
+        return featuresList;
     }
 }
