@@ -17,6 +17,7 @@ import org.openimaj.image.processor.PixelProcessor;
 import org.openimaj.ml.clustering.FeatureVectorCentroidsResult;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
+import org.openimaj.ml.clustering.kmeans.ByteKMeans;
 import org.openimaj.ml.clustering.kmeans.FeatureVectorKMeans;
 import org.openimaj.ml.clustering.kmeans.FloatKMeans;
 import org.openimaj.util.pair.IntFloatPair;
@@ -43,22 +44,15 @@ public class Main {
         }
         count = 1;
 
-        // Read testing images
-        for (MBFImage testingImage : testing) {
-            System.out.println("Reading testing... " + count);
-            testingImages.add(computeImage(testingImage));
-            count++;
-        }
-        count = 1;
-
         // Trains the assigner from a training sample
         List<ComputedImage> subTrainingImages = trainingImages.subList(0, 22);
-        ArrayList<ByteFV> featuresList = new ArrayList<>();
+        List<ByteFV> featuresList = new ArrayList<>();
         DoGSIFTEngine engine = new DoGSIFTEngine();
 
         for (ComputedImage trainingImage : subTrainingImages) {
             System.out.println("Sampling training... " + count);
             featuresList.addAll(extractFeatures(engine, trainingImage));
+            count++;
         }
         count = 1;
 
@@ -76,6 +70,14 @@ public class Main {
             bagOfVisualWords.aggregateVectorsRaw(extractFeatures(engine, trainingImage));
             count++;
         }
+
+        // Read testing images
+        for (MBFImage testingImage : testing) {
+            System.out.println("Reading testing... " + count);
+            testingImages.add(computeImage(testingImage));
+            count++;
+        }
+        count = 1;
 
         System.out.println("Finished!");
     }
