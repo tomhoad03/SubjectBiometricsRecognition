@@ -29,6 +29,10 @@ import java.nio.file.Paths;
 import java.util.*;
 
 public class Main {
+    private static final int SAMPLE_SIZE = 22;
+    private static final int NUMBER_OF_FEATURE_CLUSTERS = 500;
+    private static final int NUMBER_OF_HISTOGRAM_CLUSTERS = 500;
+
     public static void main(String[] args) throws IOException {
         final VFSListDataset<MBFImage> training = new VFSListDataset<>(Paths.get("").toAbsolutePath() + "\\src\\main\\java\\biometrics\\training", ImageUtilities.MBFIMAGE_READER);
         final VFSListDataset<MBFImage> testing = new VFSListDataset<>(Paths.get("").toAbsolutePath() + "\\src\\main\\java\\biometrics\\testing", ImageUtilities.MBFIMAGE_READER);
@@ -37,8 +41,8 @@ public class Main {
         ArrayList<ComputedImage> testingImages = new ArrayList<>();
 
         // Read training images
-        System.out.println("Reading training...");
-        int count = 0;
+        System.out.println("Reading training images...");
+        int count = 1;
 
         for (MBFImage trainingImage : training) {
             trainingImages.add(computeImage(trainingImage, count));
@@ -46,25 +50,25 @@ public class Main {
         }
 
         // Trains the assigner from a training sample
-        List<ComputedImage> subTrainingImages = trainingImages.subList(0, 22);
+        List<ComputedImage> subTrainingImages = trainingImages.subList(0, SAMPLE_SIZE);
         List<ByteFV> featuresList = new ArrayList<>();
         DoGSIFTEngine engine = new DoGSIFTEngine();
 
         // Sample the training dataset
-        System.out.println("Sampling training...");
+        System.out.println("Sampling training images...");
 
         for (ComputedImage trainingImage : subTrainingImages) {
             featuresList.addAll(extractFeatures(engine, trainingImage));
         }
 
         // K-Means clusters sampled features
-        FeatureVectorKMeans<ByteFV> kMeans = FeatureVectorKMeans.createExact(500, ByteFVComparison.EUCLIDEAN);
+        FeatureVectorKMeans<ByteFV> kMeans = FeatureVectorKMeans.createExact(NUMBER_OF_FEATURE_CLUSTERS, ByteFVComparison.EUCLIDEAN);
         FeatureVectorCentroidsResult<ByteFV> result = kMeans.cluster(featuresList);
         HardAssigner<ByteFV, float[], IntFloatPair> assigner = result.defaultHardAssigner();
         ArrayList<SparseIntFV> extractedTrainingFeatures = new ArrayList<>();
 
         // Creates a BoVW for each training image
-        System.out.println("Training...");
+        System.out.println("Training classifier...");
 
         for (ComputedImage trainingImage : trainingImages) {
             BagOfVisualWords bagOfVisualWords = new BagOfVisualWords(assigner);
@@ -74,21 +78,19 @@ public class Main {
         }
 
         // K-Means clusters the bags of visual words
-        FeatureVectorKMeans<SparseIntFV> kMeans2 = FeatureVectorKMeans.createExact(44, SparseIntFVComparison.EUCLIDEAN);
+        FeatureVectorKMeans<SparseIntFV> kMeans2 = FeatureVectorKMeans.createExact(NUMBER_OF_HISTOGRAM_CLUSTERS, SparseIntFVComparison.EUCLIDEAN);
         FeatureVectorCentroidsResult<SparseIntFV> result2 = kMeans2.cluster(extractedTrainingFeatures);
         SparseIntFV[] centroids = result2.centroids;
         HardAssigner<SparseIntFV, float[], IntFloatPair> assigner2 = result2.defaultHardAssigner();
 
         // Finds the closest centroid for each feature vector
-        System.out.println("Training classifier...");
-
         for (ComputedImage trainingImage : trainingImages) {
             trainingImage.setCentroid(centroids[assigner2.assign(trainingImage.getExtractedFeature())]);
         }
 
         // Creates a BoVW for each testing image
-        System.out.println("Reading testing...");
-        count = 0;
+        System.out.println("Reading testing images...");
+        count = 1;
 
         for (MBFImage testingImage : testing) {
             ComputedImage computedImage = computeImage(testingImage, count);
