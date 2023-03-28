@@ -29,8 +29,6 @@ import java.nio.file.Paths;
 import java.util.*;
 
 public class Main {
-    static int count = 1;
-
     public static void main(String[] args) throws IOException {
         final VFSListDataset<MBFImage> training = new VFSListDataset<>(Paths.get("").toAbsolutePath() + "\\src\\main\\java\\biometrics\\training", ImageUtilities.MBFIMAGE_READER);
         final VFSListDataset<MBFImage> testing = new VFSListDataset<>(Paths.get("").toAbsolutePath() + "\\src\\main\\java\\biometrics\\testing", ImageUtilities.MBFIMAGE_READER);
@@ -39,24 +37,25 @@ public class Main {
         ArrayList<ComputedImage> testingImages = new ArrayList<>();
 
         // Read training images
+        System.out.println("Reading training...");
+        int count = 0;
+
         for (MBFImage trainingImage : training) {
-            System.out.println("Reading training... " + count);
-            trainingImages.add(computeImage(trainingImage));
+            trainingImages.add(computeImage(trainingImage, count));
             count++;
         }
-        count = 1;
 
         // Trains the assigner from a training sample
         List<ComputedImage> subTrainingImages = trainingImages.subList(0, 22);
         List<ByteFV> featuresList = new ArrayList<>();
         DoGSIFTEngine engine = new DoGSIFTEngine();
 
+        // Sample the training dataset
+        System.out.println("Sampling training...");
+
         for (ComputedImage trainingImage : subTrainingImages) {
-            System.out.println("Sampling training... " + count);
             featuresList.addAll(extractFeatures(engine, trainingImage));
-            count++;
         }
-        count = 1;
 
         // K-Means clusters sampled features
         FeatureVectorKMeans<ByteFV> kMeans = FeatureVectorKMeans.createExact(500, ByteFVComparison.EUCLIDEAN);
@@ -64,73 +63,63 @@ public class Main {
         HardAssigner<ByteFV, float[], IntFloatPair> assigner = result.defaultHardAssigner();
         ArrayList<SparseIntFV> extractedTrainingFeatures = new ArrayList<>();
 
-        // Training the classifier
-        for (ComputedImage trainingImage : trainingImages) {
-            System.out.println("Training... " + count);
+        // Creates a BoVW for each training image
+        System.out.println("Training...");
 
-            // Creates a BoVW for the image
+        for (ComputedImage trainingImage : trainingImages) {
             BagOfVisualWords bagOfVisualWords = new BagOfVisualWords(assigner);
             SparseIntFV extractedFeature = bagOfVisualWords.aggregateVectorsRaw(extractFeatures(engine, trainingImage));
             trainingImage.setExtractedFeature(extractedFeature);
             extractedTrainingFeatures.add(extractedFeature);
-            count++;
         }
-        count = 1;
 
-        // K-Means clusters bags of visual words
+        // K-Means clusters the bags of visual words
         FeatureVectorKMeans<SparseIntFV> kMeans2 = FeatureVectorKMeans.createExact(44, SparseIntFVComparison.EUCLIDEAN);
         FeatureVectorCentroidsResult<SparseIntFV> result2 = kMeans2.cluster(extractedTrainingFeatures);
         SparseIntFV[] centroids = result2.centroids;
         HardAssigner<SparseIntFV, float[], IntFloatPair> assigner2 = result2.defaultHardAssigner();
 
-        // Finding out the classifier accuracy
+        // Finds the closest centroid for each feature vector
+        System.out.println("Training classifier...");
+
         for (ComputedImage trainingImage : trainingImages) {
-            System.out.println("Classifying training... " + count);
             trainingImage.setCentroid(centroids[assigner2.assign(trainingImage.getExtractedFeature())]);
-            count++;
         }
-        count = 1;
 
-        // Read testing images
+        // Creates a BoVW for each testing image
+        System.out.println("Reading testing...");
+        count = 0;
+
         for (MBFImage testingImage : testing) {
-            System.out.println("Reading testing... " + count);
-
-            // Creates a BoVW for the image
-            ComputedImage computedImage = computeImage(testingImage);
+            ComputedImage computedImage = computeImage(testingImage, count);
             BagOfVisualWords bagOfVisualWords = new BagOfVisualWords(assigner);
-            computedImage.setExtractedFeature(bagOfVisualWords.aggregateVectorsRaw(extractFeatures(engine, computeImage(testingImage))));
+            computedImage.setExtractedFeature(bagOfVisualWords.aggregateVectorsRaw(extractFeatures(engine, computedImage)));
             computedImage.setCentroid(centroids[assigner2.assign(computedImage.getExtractedFeature())]);
             testingImages.add(computedImage);
             count++;
         }
-        count = 1;
 
-        // Read testing images
+        // Identify the testing and training images with the same centroid
+        System.out.println("Classifying testing...");
         float correctClassificationCount = 0f;
 
         for (ComputedImage testingImage : testingImages) {
-            System.out.println("Classifying testing... " + count);
-
-            // Identify the subjects with the same centroid
             for (ComputedImage trainingImage : trainingImages) {
                 if (trainingImage.getCentroid() == testingImage.getCentroid()) {
                     if (classificationTest(testingImage.getId(), trainingImage.getId())) {
                         DisplayUtilities.display(testingImage.getImage());
                         DisplayUtilities.display(trainingImage.getImage());
-                        System.out.println("Classified " + testingImage.getId() + " to " + trainingImage.getImage());
                         correctClassificationCount += 1f;
                     }
                 }
             }
-            count++;
         }
-        count = 1;
 
-        System.out.println("Finished!");
-        System.out.println("Classification accuracy = " + ((correctClassificationCount / 22f) * 100f) + "%");
+        // Print the results
+        System.out.println("Finished!" + "\n" + "Classification accuracy = " + ((correctClassificationCount / 22f) * 100f) + "%");
     }
 
-    static ComputedImage computeImage(MBFImage image) {
+    static ComputedImage computeImage(MBFImage image, int count) {
         // Resize and crop the image
         image = image.extractCenter(image.getWidth() / 2, (image.getHeight() / 2) + 120, 720, 1260);
         MBFImage clonedImage = image.clone();
@@ -204,8 +193,6 @@ public class Main {
 
     // Classification test
     private static boolean classificationTest(int testingId, int trainingId) {
-
-
         return switch (testingId) {
             case 1 -> trainingId == 48;
             case 2 -> trainingId == 47;
