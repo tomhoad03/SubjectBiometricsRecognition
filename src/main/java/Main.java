@@ -55,11 +55,6 @@ public class Main {
             count++;
         }
 
-        runClassification(trainingImages, testingImages);
-    }
-
-
-    static void runClassification(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
         // Trains the assigner from a training sample
         List<ComputedImage> subTrainingImages = trainingImages.subList(0, SAMPLE_SIZE);
         List<ByteFV> featuresList = new ArrayList<>();
@@ -119,7 +114,6 @@ public class Main {
 
                     if (classificationTest(testingImage.getId(), trainingImage.getId())) {
                         correctClassificationCount += 1f;
-                        break;
                     }
                 }
             }
@@ -181,9 +175,9 @@ public class Main {
         for (int y = 0; y < clonedImage.getHeight(); y++) {
             for (int x = 0; x < clonedImage.getWidth(); x++) {
                 if (!pixels.contains(new Pixel(x, y))) {
-                    clonedImage.getBand(0).pixels[y][x] = 1;
-                    clonedImage.getBand(1).pixels[y][x] = 1;
-                    clonedImage.getBand(2).pixels[y][x] = 1;
+                    clonedImage.getBand(0).pixels[y][x] = 0;
+                    clonedImage.getBand(1).pixels[y][x] = 0;
+                    clonedImage.getBand(2).pixels[y][x] = 0;
                 }
             }
         }
