@@ -1,5 +1,8 @@
+import org.checkerframework.checker.units.qual.A;
 import org.openimaj.data.dataset.VFSListDataset;
-import org.openimaj.feature.*;
+import org.openimaj.feature.DoubleFV;
+import org.openimaj.feature.DoubleFVComparison;
+import org.openimaj.feature.FloatFV;
 import org.openimaj.feature.local.list.LocalFeatureList;
 import org.openimaj.image.DisplayUtilities;
 import org.openimaj.image.ImageUtilities;
@@ -15,7 +18,7 @@ import org.openimaj.image.pixel.PixelSet;
 import org.openimaj.image.processing.convolution.FFastGaussianConvolve;
 import org.openimaj.image.processing.resize.ResizeProcessor;
 import org.openimaj.image.processor.PixelProcessor;
-import org.openimaj.knn.NearestNeighbours;
+import org.openimaj.math.statistics.distribution.Histogram;
 import org.openimaj.ml.clustering.FeatureVectorCentroidsResult;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
@@ -57,7 +60,7 @@ public class Main {
         count = 1;
 
         for (MBFImage testingImage : testing) {
-            if (count % 2 == 1) {
+            if (count % 2 == 0) {
                 testingImagesFront.add(readImage(testingImage, count));
             } else {
                 testingImagesSide.add(readImage(testingImage, count));
@@ -144,7 +147,7 @@ public class Main {
         System.out.println("Sampling training images...");
 
         for (ComputedImage trainingImage : trainingImages) {
-            featuresList.addAll(extractFeatures(engine, trainingImage));
+            featuresList.addAll(extractSIFT(engine, trainingImage));
         }
 
         // K-Means clusters sampled features
@@ -157,7 +160,7 @@ public class Main {
 
         for (ComputedImage trainingImage : trainingImages) {
             BagOfVisualWords bagOfVisualWords = new BagOfVisualWords(assigner);
-            trainingImage.setExtractedFeature(bagOfVisualWords.aggregateVectorsRaw(extractFeatures(engine, trainingImage)).normaliseFV());
+            trainingImage.setExtractedFeature(bagOfVisualWords.aggregateVectorsRaw(extractSIFT(engine, trainingImage)).asDoubleFV().concatenate(extractSilhouette(trainingImage)).normaliseFV());
         }
 
         // Creates a BoVW for each testing image
@@ -165,7 +168,7 @@ public class Main {
 
         for (ComputedImage testingImage : testingImages) {
             BagOfVisualWords bagOfVisualWords = new BagOfVisualWords(assigner);
-            testingImage.setExtractedFeature(bagOfVisualWords.aggregateVectorsRaw(extractFeatures(engine, testingImage)).normaliseFV());
+            testingImage.setExtractedFeature(bagOfVisualWords.aggregateVectorsRaw(extractSIFT(engine, testingImage)).asDoubleFV().concatenate(extractSilhouette(testingImage)).normaliseFV());
         }
 
         // Nearest neighbour to find the closest training image to each testing image
@@ -177,7 +180,7 @@ public class Main {
 
             // Finds the nearest image
             for (ComputedImage trainingImage : trainingImages) {
-                double distance = testingImage.getExtractedFeature().compare(trainingImage.getExtractedFeature(), DoubleFVComparison.EUCLIDEAN);
+                double distance = DoubleFVComparison.EUCLIDEAN.compare(trainingImage.getExtractedFeature(), testingImage.getExtractedFeature());
 
                 if (nearestDistance == -1 || distance < nearestDistance) {
                     nearestDistance = distance;
@@ -187,6 +190,8 @@ public class Main {
 
             // Checks classification accuracy
             if (nearestImage != null && classificationTest(testingImage.getId(), nearestImage.getId())) {
+                DisplayUtilities.display(nearestImage.getImage());
+                DisplayUtilities.display(testingImage.getImage());
                 correctClassificationCount += 1f;
             }
         }
@@ -194,13 +199,34 @@ public class Main {
         return correctClassificationCount;
     }
 
-    // Extracts SIFT descriptors from image (invariant to S+T+R)
-    static ArrayList<DoubleFV> extractFeatures(DoGSIFTEngine engine, ComputedImage image) {
+    // Extract silhouette
+    static DoubleFV extractSilhouette(ComputedImage image) {
+        float[] array = image.getComponent().calculateBoundaryDistanceFromCentre().toArray();
+        ArrayList<Double> arrayList = new ArrayList<>();
+        for (float value : array) {
+            arrayList.add((double) value);
+        }
+
+        Random rand = new Random();
+        while (arrayList.size() > 1000) {
+            arrayList.remove(rand.nextInt(arrayList.size()));
+        }
+
+        double[] array2 = new double[1000];
+        for (int i = 0; i < 1000; i++) {
+            array2[i] = arrayList.get(i);
+        }
+
+        return new DoubleFV(array2);
+    }
+
+    // Extract SIFT descriptors
+    static ArrayList<DoubleFV> extractSIFT(DoGSIFTEngine engine, ComputedImage image) {
         ArrayList<DoubleFV> featuresList = new ArrayList<>();
         LocalFeatureList<Keypoint> keypointList = engine.findFeatures(image.getImage().flatten());
 
         for (Keypoint keypoint : keypointList) {
-            featuresList.add(keypoint.getFeatureVector().normaliseFV());
+            featuresList.add(keypoint.getFeatureVector().asDoubleFV());
         }
         return featuresList;
     }
