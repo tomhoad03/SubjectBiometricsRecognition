@@ -136,9 +136,6 @@ public class Main {
     // Classifies the dataset
     static double classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
         // Trains the assigner
-        List<DoubleFV> featuresList = new ArrayList<>();
-        DoGSIFTEngine engine = new DoGSIFTEngine();
-
         for (ComputedImage trainingImage : trainingImages) {
             trainingImage.setExtractedFeature(extractSilhouette(trainingImage).normaliseFV());
         }
@@ -186,10 +183,10 @@ public class Main {
         Random rand = new Random();
         int i = 0, maxSize = 1100;
         while (arrayList.size() > maxSize) {
-            if (i == 16) {
+            if (i == 64) {
                 i = 0;
             }
-            int subSize = arrayList.size() / 16;
+            int subSize = arrayList.size() / 64;
             arrayList.remove(rand.nextInt(i * subSize, (i + 1) * subSize));
             i++;
         }
