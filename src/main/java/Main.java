@@ -45,9 +45,9 @@ public class Main {
 
         for (MBFImage trainingImage : training) {
             if (count % 2 == 1) {
-                trainingImagesFront.add(computeImage(trainingImage, count));
+                trainingImagesFront.add(readImage(trainingImage, count));
             } else {
-                trainingImagesSide.add(computeImage(trainingImage, count));
+                trainingImagesSide.add(readImage(trainingImage, count));
             }
             count++;
         }
@@ -58,9 +58,9 @@ public class Main {
 
         for (MBFImage testingImage : testing) {
             if (count % 2 == 1) {
-                testingImagesFront.add(computeImage(testingImage, count));
+                testingImagesFront.add(readImage(testingImage, count));
             } else {
-                testingImagesSide.add(computeImage(testingImage, count));
+                testingImagesSide.add(readImage(testingImage, count));
             }
             count++;
         }
@@ -72,66 +72,7 @@ public class Main {
         System.out.println("Finished!" + "\n" + "Classification accuracy = " + (((correctClassificationCountFront + correctClassificationCountSide) / 22f) * 100f) + "%");
     }
 
-    static double classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
-        // Trains the assigner
-        List<DoubleFV> featuresList = new ArrayList<>();
-        DoGSIFTEngine engine = new DoGSIFTEngine();
-
-        // Sample the training dataset
-        System.out.println("Sampling training images...");
-
-        for (ComputedImage trainingImage : trainingImages) {
-            featuresList.addAll(extractFeatures(engine, trainingImage));
-        }
-
-        // K-Means clusters sampled features
-        FeatureVectorKMeans<DoubleFV> kMeans = FeatureVectorKMeans.createExact(NUMBER_OF_FEATURE_CLUSTERS, DoubleFVComparison.EUCLIDEAN);
-        FeatureVectorCentroidsResult<DoubleFV> result = kMeans.cluster(featuresList);
-        HardAssigner<DoubleFV, float[], IntFloatPair> assigner = result.defaultHardAssigner();
-
-        // Creates a BoVW for each training image
-        System.out.println("Training classifier...");
-
-        for (ComputedImage trainingImage : trainingImages) {
-            BagOfVisualWords bagOfVisualWords = new BagOfVisualWords(assigner);
-            trainingImage.setExtractedFeature(bagOfVisualWords.aggregateVectorsRaw(extractFeatures(engine, trainingImage)).normaliseFV());
-        }
-
-        // Creates a BoVW for each testing image
-        System.out.println("Classifying testing...");
-
-        for (ComputedImage testingImage : testingImages) {
-            BagOfVisualWords bagOfVisualWords = new BagOfVisualWords(assigner);
-            testingImage.setExtractedFeature(bagOfVisualWords.aggregateVectorsRaw(extractFeatures(engine, testingImage)).normaliseFV());
-        }
-
-        // Nearest neighbour to find the closest training image to each testing image
-        float correctClassificationCount = 0f;
-
-        for (ComputedImage testingImage : testingImages) {
-            ComputedImage nearestImage = null;
-            double nearestDistance = -1;
-
-            // Finds the nearest image
-            for (ComputedImage trainingImage : trainingImages) {
-                double distance = testingImage.getExtractedFeature().compare(trainingImage.getExtractedFeature(), DoubleFVComparison.EUCLIDEAN);
-
-                if (nearestDistance == -1 || distance < nearestDistance) {
-                    nearestDistance = distance;
-                    nearestImage = trainingImage;
-                }
-            }
-
-            // Checks classification accuracy
-            if (nearestImage != null && classificationTest(testingImage.getId(), nearestImage.getId())) {
-                correctClassificationCount += 1f;
-            }
-        }
-
-        return correctClassificationCount;
-    }
-
-    static ComputedImage computeImage(MBFImage image, int count) {
+    static ComputedImage readImage(MBFImage image, int count) {
         // Resize and crop the image
         image = image.extractCenter(image.getWidth() / 2, (image.getHeight() / 2) + 120, 720, 1260);
         image.processInplace(new ResizeProcessor(0.5f));
@@ -191,6 +132,66 @@ public class Main {
         }
 
         return new ComputedImage(count, true, personComponent, clonedImage);
+    }
+
+    // Classifies the dataset
+    static double classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
+        // Trains the assigner
+        List<DoubleFV> featuresList = new ArrayList<>();
+        DoGSIFTEngine engine = new DoGSIFTEngine();
+
+        // Sample the training dataset
+        System.out.println("Sampling training images...");
+
+        for (ComputedImage trainingImage : trainingImages) {
+            featuresList.addAll(extractFeatures(engine, trainingImage));
+        }
+
+        // K-Means clusters sampled features
+        FeatureVectorKMeans<DoubleFV> kMeans = FeatureVectorKMeans.createExact(NUMBER_OF_FEATURE_CLUSTERS, DoubleFVComparison.EUCLIDEAN);
+        FeatureVectorCentroidsResult<DoubleFV> result = kMeans.cluster(featuresList);
+        HardAssigner<DoubleFV, float[], IntFloatPair> assigner = result.defaultHardAssigner();
+
+        // Creates a BoVW for each training image
+        System.out.println("Training classifier...");
+
+        for (ComputedImage trainingImage : trainingImages) {
+            BagOfVisualWords bagOfVisualWords = new BagOfVisualWords(assigner);
+            trainingImage.setExtractedFeature(bagOfVisualWords.aggregateVectorsRaw(extractFeatures(engine, trainingImage)).normaliseFV());
+        }
+
+        // Creates a BoVW for each testing image
+        System.out.println("Classifying testing...");
+
+        for (ComputedImage testingImage : testingImages) {
+            BagOfVisualWords bagOfVisualWords = new BagOfVisualWords(assigner);
+            testingImage.setExtractedFeature(bagOfVisualWords.aggregateVectorsRaw(extractFeatures(engine, testingImage)).normaliseFV());
+        }
+
+        // Nearest neighbour to find the closest training image to each testing image
+        float correctClassificationCount = 0f;
+
+        for (ComputedImage testingImage : testingImages) {
+            ComputedImage nearestImage = null;
+            double nearestDistance = -1;
+
+            // Finds the nearest image
+            for (ComputedImage trainingImage : trainingImages) {
+                double distance = testingImage.getExtractedFeature().compare(trainingImage.getExtractedFeature(), DoubleFVComparison.EUCLIDEAN);
+
+                if (nearestDistance == -1 || distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearestImage = trainingImage;
+                }
+            }
+
+            // Checks classification accuracy
+            if (nearestImage != null && classificationTest(testingImage.getId(), nearestImage.getId())) {
+                correctClassificationCount += 1f;
+            }
+        }
+
+        return correctClassificationCount;
     }
 
     // Extracts SIFT descriptors from image (invariant to S+T+R)
