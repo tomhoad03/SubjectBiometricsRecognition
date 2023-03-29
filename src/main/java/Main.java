@@ -43,9 +43,7 @@ public class Main {
         ArrayList<ComputedImage> testingImagesSide = new ArrayList<>();
 
         // Read training images
-        System.out.println("Reading training images...");
         int count = 1;
-
         for (MBFImage trainingImage : training) {
             if (count % 2 == 1) {
                 trainingImagesFront.add(readImage(trainingImage, count));
@@ -56,9 +54,7 @@ public class Main {
         }
 
         // Read the testing images
-        System.out.println("Reading testing images...");
         count = 1;
-
         for (MBFImage testingImage : testing) {
             if (count % 2 == 0) {
                 testingImagesFront.add(readImage(testingImage, count));
@@ -143,32 +139,12 @@ public class Main {
         List<DoubleFV> featuresList = new ArrayList<>();
         DoGSIFTEngine engine = new DoGSIFTEngine();
 
-        // Sample the training dataset
-        System.out.println("Sampling training images...");
-
         for (ComputedImage trainingImage : trainingImages) {
-            featuresList.addAll(extractSIFT(engine, trainingImage));
+            trainingImage.setExtractedFeature(extractSilhouette(trainingImage).normaliseFV());
         }
-
-        // K-Means clusters sampled features
-        FeatureVectorKMeans<DoubleFV> kMeans = FeatureVectorKMeans.createExact(NUMBER_OF_FEATURE_CLUSTERS, DoubleFVComparison.EUCLIDEAN);
-        FeatureVectorCentroidsResult<DoubleFV> result = kMeans.cluster(featuresList);
-        HardAssigner<DoubleFV, float[], IntFloatPair> assigner = result.defaultHardAssigner();
-
-        // Creates a BoVW for each training image
-        System.out.println("Training classifier...");
-
-        for (ComputedImage trainingImage : trainingImages) {
-            BagOfVisualWords bagOfVisualWords = new BagOfVisualWords(assigner);
-            trainingImage.setExtractedFeature(bagOfVisualWords.aggregateVectorsRaw(extractSIFT(engine, trainingImage)).asDoubleFV().concatenate(extractSilhouette(trainingImage)).normaliseFV());
-        }
-
-        // Creates a BoVW for each testing image
-        System.out.println("Classifying testing...");
 
         for (ComputedImage testingImage : testingImages) {
-            BagOfVisualWords bagOfVisualWords = new BagOfVisualWords(assigner);
-            testingImage.setExtractedFeature(bagOfVisualWords.aggregateVectorsRaw(extractSIFT(engine, testingImage)).asDoubleFV().concatenate(extractSilhouette(testingImage)).normaliseFV());
+            testingImage.setExtractedFeature(extractSilhouette(testingImage).normaliseFV());
         }
 
         // Nearest neighbour to find the closest training image to each testing image
@@ -208,13 +184,19 @@ public class Main {
         }
 
         Random rand = new Random();
-        while (arrayList.size() > 1000) {
-            arrayList.remove(rand.nextInt(arrayList.size()));
+        int i = 0, maxSize = 1100;
+        while (arrayList.size() > maxSize) {
+            if (i == 16) {
+                i = 0;
+            }
+            int subSize = arrayList.size() / 16;
+            arrayList.remove(rand.nextInt(i * subSize, (i + 1) * subSize));
+            i++;
         }
 
-        double[] array2 = new double[1000];
-        for (int i = 0; i < 1000; i++) {
-            array2[i] = arrayList.get(i);
+        double[] array2 = new double[maxSize];
+        for (int j = 0; j < maxSize; j++) {
+            array2[j] = arrayList.get(j);
         }
 
         return new DoubleFV(array2);
