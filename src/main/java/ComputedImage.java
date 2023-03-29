@@ -1,5 +1,4 @@
 import org.openimaj.feature.DoubleFV;
-import org.openimaj.feature.SparseIntFV;
 import org.openimaj.image.MBFImage;
 import org.openimaj.image.pixel.ConnectedComponent;
 
@@ -9,7 +8,6 @@ public class ComputedImage {
     private final ConnectedComponent component;
     private final MBFImage image;
     private DoubleFV extractedFeature;
-    private DoubleFV centroid;
 
     public ComputedImage(int id, boolean isTraining, ConnectedComponent component, MBFImage image) {
         this.id = id;
@@ -40,13 +38,5 @@ public class ComputedImage {
 
     public void setExtractedFeature(DoubleFV extractedFeature) {
         this.extractedFeature = extractedFeature;
-    }
-
-    public DoubleFV getCentroid() {
-        return centroid;
-    }
-
-    public void setCentroid(DoubleFV centroid) {
-        this.centroid = centroid;
     }
 }
