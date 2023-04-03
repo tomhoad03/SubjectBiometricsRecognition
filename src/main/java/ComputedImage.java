@@ -4,15 +4,15 @@ import org.openimaj.image.pixel.ConnectedComponent;
 
 public class ComputedImage {
     private final int id;
-    private final boolean isTraining;
-    private final ConnectedComponent component;
+    private final float[] boundaryDistances;
+    private final double aspectRatio;
     private final MBFImage image;
     private DoubleFV extractedFeature;
 
-    public ComputedImage(int id, boolean isTraining, ConnectedComponent component, MBFImage image) {
+    public ComputedImage(int id, ConnectedComponent component, MBFImage image) {
         this.id = id;
-        this.isTraining = isTraining;
-        this.component = component;
+        this.boundaryDistances = component.calculateBoundaryDistanceFromCentre().toArray();
+        this.aspectRatio = component.calculateOrientatedBoundingBoxAspectRatio();
         this.image = image;
     }
 
@@ -20,12 +20,12 @@ public class ComputedImage {
         return id;
     }
 
-    public boolean isTraining() {
-        return isTraining;
+    public float[] getBoundaryDistances() {
+        return boundaryDistances;
     }
 
-    public ConnectedComponent getComponent() {
-        return component;
+    public double getAspectRatio() {
+        return aspectRatio;
     }
 
     public MBFImage getImage() {

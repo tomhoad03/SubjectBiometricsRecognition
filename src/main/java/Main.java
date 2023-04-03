@@ -58,7 +58,10 @@ public class Main {
         double correctClassificationCountSide = classifyImages(trainingImagesSide, testingImagesSide);
 
         // Print the results
-        System.out.println("Finished!" + "\n" + "Classification accuracy = " + (((correctClassificationCountFront + correctClassificationCountSide) / 22f) * 100f) + "%");
+        System.out.println("Finished!"
+                + "\n" + "Front Classification Accuracy = " + ((correctClassificationCountFront / 11f) * 100f) + "%"
+                + "\n" + "Side Classification Accuracy = " + ((correctClassificationCountSide / 11f) * 100f) + "%"
+                + "\n" + "Correct Classification Rate (CCR) = " + (((correctClassificationCountFront + correctClassificationCountSide) / 22f) * 100f) + "%");
     }
 
     static ComputedImage readImage(MBFImage image, int count) {
@@ -120,7 +123,7 @@ public class Main {
             }
         }
 
-        return new ComputedImage(count, true, personComponent, clonedImage);
+        return new ComputedImage(count, personComponent, clonedImage);
     }
 
     // Classifies the dataset
@@ -134,6 +137,10 @@ public class Main {
             testingImage.setExtractedFeature(extractSilhouette(testingImage).normaliseFV());
         }
 
+        // K-Nearest Neighbours based on aspect ratio
+        trainingImages.sort(Comparator.comparingDouble(ComputedImage::getAspectRatio));
+        List<ComputedImage> kNearestTrainingImages = trainingImages.subList(0, 10);
+
         // Nearest neighbour to find the closest training image to each testing image
         float correctClassificationCount = 0f;
 
@@ -142,7 +149,7 @@ public class Main {
             double nearestDistance = -1;
 
             // Finds the nearest image
-            for (ComputedImage trainingImage : trainingImages) {
+            for (ComputedImage trainingImage : kNearestTrainingImages) {
                 double distance = DoubleFVComparison.EUCLIDEAN.compare(trainingImage.getExtractedFeature(), testingImage.getExtractedFeature());
 
                 if (nearestDistance == -1 || distance < nearestDistance) {
@@ -158,13 +165,13 @@ public class Main {
                 correctClassificationCount += 1f;
             }
         }
-
         return correctClassificationCount;
     }
 
     // Extract silhouette
     static DoubleFV extractSilhouette(ComputedImage image) {
-        float[] array = image.getComponent().calculateBoundaryDistanceFromCentre().toArray();
+        float[] array = image.getBoundaryDistances();
+
         ArrayList<Double> arrayList = new ArrayList<>();
         for (float value : array) {
             arrayList.add((double) value);
@@ -188,7 +195,6 @@ public class Main {
 
         return new DoubleFV(array2);
     }
-
 
     // Post classification test - not used in classification
     static boolean classificationTest(int testingId, int trainingId) {
