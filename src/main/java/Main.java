@@ -10,7 +10,6 @@ import org.openimaj.image.pixel.ConnectedComponent;
 import org.openimaj.image.pixel.Pixel;
 import org.openimaj.image.pixel.PixelSet;
 import org.openimaj.image.processing.convolution.FFastGaussianConvolve;
-import org.openimaj.image.processing.resize.ResizeProcessor;
 import org.openimaj.image.processor.PixelProcessor;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
@@ -20,21 +19,23 @@ import org.openimaj.util.pair.IntFloatPair;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class Main {
     public static void main(String[] args) throws IOException {
         String path = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\biometrics\\";
-        VFSListDataset<MBFImage> training = new VFSListDataset<>(path + "training", ImageUtilities.MBFIMAGE_READER);
-        VFSListDataset<MBFImage> testing = new VFSListDataset<>(path + "testing", ImageUtilities.MBFIMAGE_READER);
+        AtomicReference<VFSListDataset<MBFImage>> training = new AtomicReference<>(new VFSListDataset<>(path + "training", ImageUtilities.MBFIMAGE_READER));
+        AtomicReference<VFSListDataset<MBFImage>> testing = new AtomicReference<>(new VFSListDataset<>(path + "testing", ImageUtilities.MBFIMAGE_READER));
 
         ArrayList<ComputedImage> trainingImagesFront = new ArrayList<>();
         ArrayList<ComputedImage> trainingImagesSide = new ArrayList<>();
+
         ArrayList<ComputedImage> testingImagesFront = new ArrayList<>();
         ArrayList<ComputedImage> testingImagesSide = new ArrayList<>();
 
         // Read training images
         int count = 1;
-        for (MBFImage trainingImage : training) {
+        for (MBFImage trainingImage : training.get()) {
             if (count % 2 == 1) {
                 trainingImagesFront.add(readImage(trainingImage, count));
             } else {
@@ -45,7 +46,7 @@ public class Main {
 
         // Read the testing images
         count = 1;
-        for (MBFImage testingImage : testing) {
+        for (MBFImage testingImage : testing.get()) {
             if (count % 2 == 0) {
                 testingImagesFront.add(readImage(testingImage, count));
             } else {
@@ -65,9 +66,8 @@ public class Main {
     }
 
     static ComputedImage readImage(MBFImage image, int count) {
-        // Resize and crop the image
+        // Crop the image
         image = image.extractCenter(image.getWidth() / 2, (image.getHeight() / 2) + 120, 720, 1260);
-        image.processInplace(new ResizeProcessor(0.5f));
         MBFImage clonedImage = image.clone();
 
         // Apply a Gaussian blur to reduce noise
@@ -137,16 +137,20 @@ public class Main {
             testingImage.setExtractedFeature(extractSilhouette(testingImage).normaliseFV());
         }
 
-        // K-Nearest Neighbours based on aspect ratio
-        trainingImages.sort(Comparator.comparingDouble(ComputedImage::getAspectRatio));
-        List<ComputedImage> kNearestTrainingImages = trainingImages.subList(0, 10);
-
         // Nearest neighbour to find the closest training image to each testing image
         float correctClassificationCount = 0f;
 
         for (ComputedImage testingImage : testingImages) {
             ComputedImage nearestImage = null;
             double nearestDistance = -1;
+
+            // K-Nearest Neighbours based on area ratio : aspect ratio (should be invariant to treadmill, may not have enough variation to help)
+            trainingImages.sort(Comparator.comparingDouble(o -> Math.abs(o.getAspectAreaRatio() - testingImage.getAspectAreaRatio())));
+            List<ComputedImage> kNearestTrainingImages = trainingImages.subList(0, trainingImages.size() / 2);
+
+            // K-Nearest Neighbours based on second order centralised moment
+            kNearestTrainingImages.sort(Comparator.comparingDouble(o -> DoubleFVComparison.EUCLIDEAN.compare(o.getSecondCentralisedMoment(), testingImage.getSecondCentralisedMoment())));
+            kNearestTrainingImages = kNearestTrainingImages.subList(0, kNearestTrainingImages.size() / 2);
 
             // Finds the nearest image
             for (ComputedImage trainingImage : kNearestTrainingImages) {
@@ -160,10 +164,10 @@ public class Main {
 
             // Checks classification accuracy
             if (nearestImage != null && classificationTest(testingImage.getId(), nearestImage.getId())) {
-                DisplayUtilities.display(nearestImage.getImage());
-                DisplayUtilities.display(testingImage.getImage());
                 correctClassificationCount += 1f;
             }
+            DisplayUtilities.display(testingImage.getImage());
+            DisplayUtilities.display(nearestImage.getImage());
         }
         return correctClassificationCount;
     }
