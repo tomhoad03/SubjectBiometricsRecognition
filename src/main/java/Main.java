@@ -1,28 +1,19 @@
-import org.checkerframework.checker.units.qual.A;
 import org.openimaj.data.dataset.VFSListDataset;
 import org.openimaj.feature.DoubleFV;
 import org.openimaj.feature.DoubleFVComparison;
-import org.openimaj.feature.FloatFV;
-import org.openimaj.feature.local.list.LocalFeatureList;
 import org.openimaj.image.DisplayUtilities;
 import org.openimaj.image.ImageUtilities;
 import org.openimaj.image.MBFImage;
 import org.openimaj.image.colour.ColourSpace;
 import org.openimaj.image.connectedcomponent.GreyscaleConnectedComponentLabeler;
-import org.openimaj.image.feature.local.aggregate.BagOfVisualWords;
-import org.openimaj.image.feature.local.engine.DoGSIFTEngine;
-import org.openimaj.image.feature.local.keypoints.Keypoint;
 import org.openimaj.image.pixel.ConnectedComponent;
 import org.openimaj.image.pixel.Pixel;
 import org.openimaj.image.pixel.PixelSet;
 import org.openimaj.image.processing.convolution.FFastGaussianConvolve;
 import org.openimaj.image.processing.resize.ResizeProcessor;
 import org.openimaj.image.processor.PixelProcessor;
-import org.openimaj.math.statistics.distribution.Histogram;
-import org.openimaj.ml.clustering.FeatureVectorCentroidsResult;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
-import org.openimaj.ml.clustering.kmeans.FeatureVectorKMeans;
 import org.openimaj.ml.clustering.kmeans.FloatKMeans;
 import org.openimaj.util.pair.IntFloatPair;
 
@@ -31,11 +22,10 @@ import java.nio.file.Paths;
 import java.util.*;
 
 public class Main {
-    private static final int NUMBER_OF_FEATURE_CLUSTERS = 500;
-
     public static void main(String[] args) throws IOException {
-        final VFSListDataset<MBFImage> training = new VFSListDataset<>(Paths.get("").toAbsolutePath() + "\\src\\main\\java\\biometrics\\training", ImageUtilities.MBFIMAGE_READER);
-        final VFSListDataset<MBFImage> testing = new VFSListDataset<>(Paths.get("").toAbsolutePath() + "\\src\\main\\java\\biometrics\\testing", ImageUtilities.MBFIMAGE_READER);
+        String path = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\biometrics\\";
+        VFSListDataset<MBFImage> training = new VFSListDataset<>(path + "training", ImageUtilities.MBFIMAGE_READER);
+        VFSListDataset<MBFImage> testing = new VFSListDataset<>(path + "testing", ImageUtilities.MBFIMAGE_READER);
 
         ArrayList<ComputedImage> trainingImagesFront = new ArrayList<>();
         ArrayList<ComputedImage> trainingImagesSide = new ArrayList<>();
@@ -199,16 +189,6 @@ public class Main {
         return new DoubleFV(array2);
     }
 
-    // Extract SIFT descriptors
-    static ArrayList<DoubleFV> extractSIFT(DoGSIFTEngine engine, ComputedImage image) {
-        ArrayList<DoubleFV> featuresList = new ArrayList<>();
-        LocalFeatureList<Keypoint> keypointList = engine.findFeatures(image.getImage().flatten());
-
-        for (Keypoint keypoint : keypointList) {
-            featuresList.add(keypoint.getFeatureVector().asDoubleFV());
-        }
-        return featuresList;
-    }
 
     // Post classification test - not used in classification
     static boolean classificationTest(int testingId, int trainingId) {
