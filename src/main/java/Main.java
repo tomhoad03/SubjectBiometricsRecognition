@@ -252,7 +252,16 @@ public class Main {
 
         for (Joints.Joint joint : joints) {
             double xDiff = joint.getX() - centroidX, yDiff = joint.getY() - centroidY;
-            angledJoints.add(new AngledJoint(Math.sqrt(Math.pow(xDiff, 2) + Math.pow(yDiff, 2)), Math.atan(xDiff / yDiff)));
+            double radius = Math.sqrt(Math.pow(xDiff, 2) + Math.pow(yDiff, 2));
+            double angle = Math.atan(yDiff / xDiff);
+
+            if (xDiff < 0 && (yDiff > 0 || yDiff < 0)) {
+                angle += Math.PI;
+            } else if (xDiff > 0 && yDiff < 0) {
+                angle += (2 * Math.PI);
+            }
+
+            angledJoints.add(new AngledJoint(radius, angle));
         }
         angledJoints.sort(Comparator.comparingDouble(o -> o.angle));
 
