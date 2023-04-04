@@ -282,8 +282,7 @@ public class Main {
                 array2[i] = 0;
             }
         }
-
-        return new DoubleFV(array1).normaliseFV();
+        return new DoubleFV(array1).normaliseFV().concatenate(new DoubleFV(array2).normaliseFV());
     }
 
     public record AngledJoint(double radius, double angle) { }
