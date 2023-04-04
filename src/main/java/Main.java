@@ -34,7 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
-    private static final float SPEED_FACTOR = 0.25f; // 1f - Normal running, 0.25f - Fast running
+    private static final float SPEED_FACTOR = 1f; // 1f - Normal running, 0.25f - Fast running
     private static Predictor<Image, Joints> predictor;
 
     public static void main(String[] args) throws IOException, TranslateException {
@@ -179,11 +179,11 @@ public class Main {
     static double classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
         // Trains the assigner
         for (ComputedImage trainingImage : trainingImages) {
-            trainingImage.setExtractedFeature(extractJointsFV(trainingImage)); // .concatenate(extractSilhouetteFV(trainingImage))
+            trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage).concatenate(extractJointsFV(trainingImage)));
         }
 
         for (ComputedImage testingImage : testingImages) {
-            testingImage.setExtractedFeature(extractJointsFV(testingImage)); // .concatenate(extractSilhouetteFV(testingImage))
+            testingImage.setExtractedFeature(extractSilhouetteFV(testingImage).concatenate(extractJointsFV(testingImage)));
         }
 
         // Nearest neighbour to find the closest training image to each testing image
@@ -263,9 +263,27 @@ public class Main {
 
             angledJoints.add(new AngledJoint(radius, angle));
         }
-        angledJoints.sort(Comparator.comparingDouble(o -> o.angle));
+        angledJoints.sort(Comparator.comparingDouble(o -> o.radius));
 
-        return new DoubleFV(new double[]{0.0}).normaliseFV();
+        double[] array1 = new double[17];
+        for (int i = 0; i < 17; i++) {
+            try {
+                array1[i] = angledJoints.get(i).radius;
+            } catch (Exception e) {
+                array1[i] = 0;
+            }
+        }
+
+        double[] array2 = new double[17];
+        for (int i = 0; i < 17; i++) {
+            try {
+                array2[i] = angledJoints.get(i).angle;
+            } catch (Exception e) {
+                array2[i] = 0;
+            }
+        }
+
+        return new DoubleFV(array1).normaliseFV();
     }
 
     public record AngledJoint(double radius, double angle) { }
