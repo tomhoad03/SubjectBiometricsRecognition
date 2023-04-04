@@ -1,27 +1,24 @@
+import ai.djl.modality.cv.output.Joints;
 import org.openimaj.feature.DoubleFV;
 import org.openimaj.image.MBFImage;
-import org.openimaj.image.pixel.ConnectedComponent;
-import org.openimaj.math.geometry.shape.Rectangle;
+import org.openimaj.image.pixel.Pixel;
 
 public class ComputedImage {
     private final int id;
     private final MBFImage image;
+    private final Pixel centroid;
     private final float[] boundaryDistances;
     private final DoubleFV secondCentralisedMoment;
-    private final double areaRatio;
-    private final double aspectRatio;
+    private final Joints joints;
     private DoubleFV extractedFeature;
 
-    public ComputedImage(int id, ConnectedComponent component, MBFImage image) {
+    public ComputedImage(int id, MBFImage image, Pixel centroid, float[] boundaryDistances, DoubleFV secondCentralisedMoment, Joints joints) {
         this.id = id;
         this.image = image;
-
-        this.boundaryDistances = component.calculateBoundaryDistanceFromCentre().toArray();
-        this.secondCentralisedMoment = new DoubleFV(component.calculateConvexHull().calculateSecondMomentCentralised()).normaliseFV();
-
-        Rectangle r = component.calculateRegularBoundingBox();
-        this.areaRatio = (r.height * r.width) / component.calculateArea();
-        this.aspectRatio = component.calculateOrientatedBoundingBoxAspectRatio();
+        this.centroid = centroid;
+        this.boundaryDistances = boundaryDistances;
+        this.secondCentralisedMoment = secondCentralisedMoment;
+        this.joints = joints;
     }
 
     public int getId() {
@@ -32,6 +29,10 @@ public class ComputedImage {
         return image;
     }
 
+    public Pixel getCentroid() {
+        return centroid;
+    }
+
     public float[] getBoundaryDistances() {
         return boundaryDistances;
     }
@@ -40,16 +41,8 @@ public class ComputedImage {
         return secondCentralisedMoment;
     }
 
-    public double getAreaRatio() {
-        return areaRatio;
-    }
-
-    public double getAspectRatio() {
-        return aspectRatio;
-    }
-
-    public double getAspectAreaRatio() {
-        return aspectRatio / areaRatio;
+    public Joints getJoints() {
+        return joints;
     }
 
     public DoubleFV getExtractedFeature() {

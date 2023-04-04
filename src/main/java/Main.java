@@ -1,3 +1,10 @@
+import ai.djl.Application;
+import ai.djl.inference.Predictor;
+import ai.djl.modality.cv.BufferedImageFactory;
+import ai.djl.modality.cv.Image;
+import ai.djl.modality.cv.output.Joints;
+import ai.djl.repository.zoo.Criteria;
+import ai.djl.translate.TranslateException;
 import org.openimaj.data.dataset.VFSListDataset;
 import org.openimaj.feature.DoubleFV;
 import org.openimaj.feature.DoubleFVComparison;
@@ -10,22 +17,29 @@ import org.openimaj.image.pixel.ConnectedComponent;
 import org.openimaj.image.pixel.Pixel;
 import org.openimaj.image.pixel.PixelSet;
 import org.openimaj.image.processing.convolution.FFastGaussianConvolve;
+import org.openimaj.image.processing.resize.ResizeProcessor;
 import org.openimaj.image.processor.PixelProcessor;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
 import org.openimaj.ml.clustering.kmeans.FloatKMeans;
 import org.openimaj.util.pair.IntFloatPair;
 
+import javax.imageio.ImageIO;
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class Main {
-    public static void main(String[] args) throws IOException {
-        String path = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\biometrics\\";
-        AtomicReference<VFSListDataset<MBFImage>> training = new AtomicReference<>(new VFSListDataset<>(path + "training", ImageUtilities.MBFIMAGE_READER));
-        AtomicReference<VFSListDataset<MBFImage>> testing = new AtomicReference<>(new VFSListDataset<>(path + "testing", ImageUtilities.MBFIMAGE_READER));
+    private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
+    private static final float SPEED_FACTOR = 0.25f; // 1f - Normal running, 0.25f - Fast running
+    private static Predictor<Image, Joints> predictor;
+
+    public static void main(String[] args) throws IOException, TranslateException {
+        AtomicReference<VFSListDataset<MBFImage>> training = new AtomicReference<>(new VFSListDataset<>(PATH + "biometrics\\training", ImageUtilities.MBFIMAGE_READER));
+        AtomicReference<VFSListDataset<MBFImage>> testing = new AtomicReference<>(new VFSListDataset<>(PATH + "biometrics\\testing", ImageUtilities.MBFIMAGE_READER));
 
         ArrayList<ComputedImage> trainingImagesFront = new ArrayList<>();
         ArrayList<ComputedImage> trainingImagesSide = new ArrayList<>();
@@ -33,24 +47,43 @@ public class Main {
         ArrayList<ComputedImage> testingImagesFront = new ArrayList<>();
         ArrayList<ComputedImage> testingImagesSide = new ArrayList<>();
 
-        // Read training images
+        // Pose estimation using DJL
+        try {
+            predictor = Criteria.builder()
+                    .optApplication(Application.CV.POSE_ESTIMATION)
+                    .setTypes(Image.class, Joints.class)
+                    .optFilter("backbone", "resnet18")
+                    .optFilter("flavor", "v1b")
+                    .optFilter("dataset", "imagenet")
+                    .optEngine("MXNet")
+                    .build()
+                    .loadModel()
+                    .newPredictor();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        // Read and print the training images
         int count = 1;
+
         for (MBFImage trainingImage : training.get()) {
+            ComputedImage image = readImage(trainingImage, count, true);
             if (count % 2 == 1) {
-                trainingImagesFront.add(readImage(trainingImage, count));
+                trainingImagesFront.add(image);
             } else {
-                trainingImagesSide.add(readImage(trainingImage, count));
+                trainingImagesSide.add(image);
             }
             count++;
         }
 
-        // Read the testing images
+        // Read and print the testing images
         count = 1;
         for (MBFImage testingImage : testing.get()) {
+            ComputedImage image = readImage(testingImage, count, false);
             if (count % 2 == 0) {
-                testingImagesFront.add(readImage(testingImage, count));
+                testingImagesFront.add(image);
             } else {
-                testingImagesSide.add(readImage(testingImage, count));
+                testingImagesSide.add(image);
             }
             count++;
         }
@@ -65,9 +98,10 @@ public class Main {
                 + "\n" + "Correct Classification Rate (CCR) = " + (((correctClassificationCountFront + correctClassificationCountSide) / 22f) * 100f) + "%");
     }
 
-    static ComputedImage readImage(MBFImage image, int count) {
+    static ComputedImage readImage(MBFImage image, int count, boolean isTraining) throws IOException, TranslateException {
         // Crop the image
-        image = image.extractCenter(image.getWidth() / 2, (image.getHeight() / 2) + 120, 720, 1260);
+        image = image.extractCenter((image.getWidth() / 2) + 80, (image.getHeight() / 2) + 110, 750, 1280);
+        image.processInplace(new ResizeProcessor(SPEED_FACTOR));
         MBFImage clonedImage = image.clone();
 
         // Apply a Gaussian blur to reduce noise
@@ -107,10 +141,10 @@ public class Main {
         // Get the person component
         components.sort(Comparator.comparingInt(PixelSet::calculateArea));
         Collections.reverse(components);
-        ConnectedComponent personComponent = components.get(1);
+        ConnectedComponent component = components.get(1);
 
         // Get the boundary pixels and all contained pixels
-        Set<Pixel> pixels = personComponent.getPixels();
+        Set<Pixel> pixels = component.getPixels();
 
         // Remove all unnecessary pixels from image
         for (int y = 0; y < clonedImage.getHeight(); y++) {
@@ -123,18 +157,33 @@ public class Main {
             }
         }
 
-        return new ComputedImage(count, personComponent, clonedImage);
+        // Find the joints of training images
+        String resultPath = isTraining ? "training" : "testing";
+        File imageFile = new File(PATH + "computed\\" + resultPath + "\\" + count + ".jpg");
+        ImageUtilities.write(clonedImage, imageFile);
+        Image jointsImage = BufferedImageFactory.getInstance().fromImage(ImageIO.read(imageFile));
+
+        Joints joints = predictor.predict(jointsImage);
+        jointsImage.drawJoints(joints);
+        jointsImage.save(Files.newOutputStream(Paths.get(PATH + "joints\\" + resultPath + "\\" + count + ".png")), "png");
+
+        return new ComputedImage(count,
+                clonedImage, // The image (to be removed later)
+                component.calculateCentroidPixel(), // The persons centroid
+                component.calculateBoundaryDistanceFromCentre().toArray(), // Boundary distances
+                new DoubleFV(component.calculateConvexHull().calculateSecondMomentCentralised()).normaliseFV(), // Second order centralised moment
+                joints); // Joint positions
     }
 
     // Classifies the dataset
     static double classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
         // Trains the assigner
         for (ComputedImage trainingImage : trainingImages) {
-            trainingImage.setExtractedFeature(extractSilhouette(trainingImage).normaliseFV());
+            trainingImage.setExtractedFeature(extractJointsFV(trainingImage)); // .concatenate(extractSilhouetteFV(trainingImage))
         }
 
         for (ComputedImage testingImage : testingImages) {
-            testingImage.setExtractedFeature(extractSilhouette(testingImage).normaliseFV());
+            testingImage.setExtractedFeature(extractJointsFV(testingImage)); // .concatenate(extractSilhouetteFV(testingImage))
         }
 
         // Nearest neighbour to find the closest training image to each testing image
@@ -144,13 +193,9 @@ public class Main {
             ComputedImage nearestImage = null;
             double nearestDistance = -1;
 
-            // K-Nearest Neighbours based on area ratio : aspect ratio (should be invariant to treadmill, may not have enough variation to help)
-            trainingImages.sort(Comparator.comparingDouble(o -> Math.abs(o.getAspectAreaRatio() - testingImage.getAspectAreaRatio())));
-            List<ComputedImage> kNearestTrainingImages = trainingImages.subList(0, trainingImages.size() / 2);
-
             // K-Nearest Neighbours based on second order centralised moment
-            kNearestTrainingImages.sort(Comparator.comparingDouble(o -> DoubleFVComparison.EUCLIDEAN.compare(o.getSecondCentralisedMoment(), testingImage.getSecondCentralisedMoment())));
-            kNearestTrainingImages = kNearestTrainingImages.subList(0, kNearestTrainingImages.size() / 2);
+            trainingImages.sort(Comparator.comparingDouble(o -> DoubleFVComparison.EUCLIDEAN.compare(o.getSecondCentralisedMoment(), testingImage.getSecondCentralisedMoment())));
+            List<ComputedImage> kNearestTrainingImages = trainingImages.subList(0, trainingImages.size() / 2);
 
             // Finds the nearest image
             for (ComputedImage trainingImage : kNearestTrainingImages) {
@@ -164,16 +209,16 @@ public class Main {
 
             // Checks classification accuracy
             if (nearestImage != null && classificationTest(testingImage.getId(), nearestImage.getId())) {
+                DisplayUtilities.display(testingImage.getImage());
+                DisplayUtilities.display(nearestImage.getImage());
                 correctClassificationCount += 1f;
             }
-            DisplayUtilities.display(testingImage.getImage());
-            DisplayUtilities.display(nearestImage.getImage());
         }
         return correctClassificationCount;
     }
 
-    // Extract silhouette
-    static DoubleFV extractSilhouette(ComputedImage image) {
+    // Extract silhouette feature vector
+    static DoubleFV extractSilhouetteFV(ComputedImage image) {
         float[] array = image.getBoundaryDistances();
 
         ArrayList<Double> arrayList = new ArrayList<>();
@@ -182,7 +227,7 @@ public class Main {
         }
 
         Random rand = new Random();
-        int i = 0, maxSize = 1100;
+        int i = 0, maxSize = (int) (2200 * SPEED_FACTOR);
         while (arrayList.size() > maxSize) {
             if (i == 64) {
                 i = 0;
@@ -196,11 +241,27 @@ public class Main {
         for (int j = 0; j < maxSize; j++) {
             array2[j] = arrayList.get(j);
         }
-
-        return new DoubleFV(array2);
+        return new DoubleFV(array2).normaliseFV();
     }
 
-    // Post classification test - not used in classification
+    // Extract joints feature vector
+    static DoubleFV extractJointsFV(ComputedImage image) {
+        List<Joints.Joint> joints = image.getJoints().getJoints();
+        ArrayList<AngledJoint> angledJoints = new ArrayList<>();
+        double centroidX = image.getCentroid().getX() / image.getImage().getWidth(), centroidY =  image.getCentroid().getY() / image.getImage().getHeight();
+
+        for (Joints.Joint joint : joints) {
+            double xDiff = joint.getX() - centroidX, yDiff = joint.getY() - centroidY;
+            angledJoints.add(new AngledJoint(Math.sqrt(Math.pow(xDiff, 2) + Math.pow(yDiff, 2)), Math.atan(xDiff / yDiff)));
+        }
+        angledJoints.sort(Comparator.comparingDouble(o -> o.angle));
+
+        return new DoubleFV(new double[]{0.0}).normaliseFV();
+    }
+
+    public record AngledJoint(double radius, double angle) { }
+
+    // CCR test - not used in classification
     static boolean classificationTest(int testingId, int trainingId) {
         return switch (testingId) {
             case 1 -> trainingId == 48;
