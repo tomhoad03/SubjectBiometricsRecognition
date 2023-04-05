@@ -11,15 +11,17 @@ import java.util.List;
 public class ComputedImage {
     private final int id;
     private final MBFImage image;
+    private final Boolean isFront;
     private final Pixel centroid;
     private final List<Pixel> boundaryPixels;
     private final double[] secondCentralisedMoment;
     private final Joints joints;
     private DoubleFV extractedFeature;
 
-    public ComputedImage(int id, MBFImage image, Pixel centroid, List<Pixel> boundaryPixels, double[] secondCentralisedMoment, Joints joints) {
+    public ComputedImage(int id, MBFImage image, Boolean isFront, Pixel centroid, List<Pixel> boundaryPixels, double[] secondCentralisedMoment, Joints joints) {
         this.id = id;
         this.image = image;
+        this.isFront = isFront;
         this.centroid = centroid;
         this.boundaryPixels = boundaryPixels;
         this.secondCentralisedMoment = secondCentralisedMoment;
@@ -35,7 +37,7 @@ public class ComputedImage {
     }
 
     // Extract silhouette feature vector
-    DoubleFV extractSilhouetteFV() {
+    public DoubleFV extractSilhouetteFV() {
         int maxBins = 128, count = 0;
         double[] doubleDistances = new double[maxBins];
         ArrayList<PolarPixel> pixels = new ArrayList<>();
@@ -82,7 +84,7 @@ public class ComputedImage {
     public record PolarPixel(double radius, double angle, Pixel pixel) { }
 
     // Extract joints feature vector
-    DoubleFV extractJointsFV() {
+    public DoubleFV extractJointsFV() {
         List<Joints.Joint> joints = this.joints.getJoints();
         ArrayList<Double> jointRadii = new ArrayList<>();
         double width = this.image.getWidth(), height = this.image.getHeight();
@@ -121,11 +123,16 @@ public class ComputedImage {
         array3[2] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 3).getX() - jointPixels.get(jointPixels.size() - 4).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 3).getY() - jointPixels.get(jointPixels.size() - 4).getY(), 2));
         array3[3] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 1).getX() - jointPixels.get(jointPixels.size() - 2).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 1).getY() - jointPixels.get(jointPixels.size() - 2).getY(), 2));
 
-        return new DoubleFV(array1).normaliseFV();
+        DoubleFV featureVector = new DoubleFV(array1).normaliseFV();
+        if (isFront) {
+            return featureVector; //.concatenate(new DoubleFV(array2).normaliseFV()).concatenate(new DoubleFV(array3).normaliseFV());
+        } else {
+            return featureVector;
+        }
     }
 
     // Extract moments feature vector
-    DoubleFV extractMomentsFV() {
+    public DoubleFV extractMomentsFV() {
         return new DoubleFV(this.secondCentralisedMoment).normaliseFV();
     }
 

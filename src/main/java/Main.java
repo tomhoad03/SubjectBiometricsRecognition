@@ -68,11 +68,10 @@ public class Main {
         int count = 1;
 
         for (MBFImage trainingImage : training.get()) {
-            ComputedImage image = readImage(trainingImage, count, true);
             if (count % 2 == 1) {
-                trainingImagesFront.add(image);
+                trainingImagesFront.add(readImage(trainingImage, count, true, true));
             } else {
-                trainingImagesSide.add(image);
+                trainingImagesSide.add(readImage(trainingImage, count, true, false));
             }
             count++;
         }
@@ -80,11 +79,10 @@ public class Main {
         // Read and print the testing images
         count = 1;
         for (MBFImage testingImage : testing.get()) {
-            ComputedImage image = readImage(testingImage, count, false);
             if (count % 2 == 0) {
-                testingImagesFront.add(image);
+                testingImagesFront.add(readImage(testingImage, count, false, true));
             } else {
-                testingImagesSide.add(image);
+                testingImagesSide.add(readImage(testingImage, count, false, false));
             }
             count++;
         }
@@ -99,7 +97,7 @@ public class Main {
                 + "\n" + "Correct Classification Rate (CCR) = " + ((((float) (correctClassificationCountFront + correctClassificationCountSide)) / 22f) * 100f) + "%");
     }
 
-    static ComputedImage readImage(MBFImage image, int count, boolean isTraining) throws IOException, TranslateException {
+    static ComputedImage readImage(MBFImage image, int count, boolean isTraining, boolean isFront) throws IOException, TranslateException {
         // Crop the image
         image = image.extractCenter((image.getWidth() / 2) + 100, (image.getHeight() / 2) + 115, 740, 1280);
         image.processInplace(new ResizeProcessor(SPEED_FACTOR));
@@ -187,6 +185,7 @@ public class Main {
 
         return new ComputedImage(count,
                 clonedImage, // The image (to be removed later)
+                isFront,
                 component.calculateCentroidPixel(), // The persons centroid
                 component.getOuterBoundary(), // Boundary pixels
                 component.calculateConvexHull().calculateSecondMomentCentralised(), // Second order centralised moment
