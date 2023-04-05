@@ -19,6 +19,7 @@ import org.openimaj.image.pixel.PixelSet;
 import org.openimaj.image.processing.convolution.FFastGaussianConvolve;
 import org.openimaj.image.processing.resize.ResizeProcessor;
 import org.openimaj.image.processor.PixelProcessor;
+import org.openimaj.image.typography.hershey.HersheyFont;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
 import org.openimaj.ml.clustering.kmeans.FloatKMeans;
@@ -101,7 +102,7 @@ public class Main {
 
     static ComputedImage readImage(MBFImage image, int count, boolean isTraining) throws IOException, TranslateException {
         // Crop the image
-        image = image.extractCenter((image.getWidth() / 2) + 80, (image.getHeight() / 2) + 110, 750, 1280);
+        image = image.extractCenter((image.getWidth() / 2) + 100, (image.getHeight() / 2) + 115, 740, 1280);
         image.processInplace(new ResizeProcessor(SPEED_FACTOR));
         MBFImage clonedImage = image.clone();
 
@@ -167,17 +168,22 @@ public class Main {
         Image jointsImage = BufferedImageFactory.getInstance().fromImage(ImageIO.read(imageFile));
         Joints joints = predictor.predict(jointsImage);
 
-        int countColour = 0;
+        int countColour = 0, bodyPartCount = 0;
         for (Joints.Joint joint : joints.getJoints()) {
             Pixel pixel = new Pixel((int) (joint.getX() * clonedImage.getWidth()), (int) (joint.getY() * clonedImage.getHeight()));
+
             clonedImage.drawPoint(pixel, colours[countColour], 5);
+            clonedImage.drawText(bodyParts[bodyPartCount], pixel, HersheyFont.TIMES_MEDIUM, 20, RGBColour.RED);
+            clonedImage.drawPolygon(component.toPolygon(), RGBColour.RED);
 
             if (countColour < colours.length - 1) {
                 countColour++;
             } else {
                 countColour = 0;
             }
+            bodyPartCount++;
         }
+        clonedImage = clonedImage.extractROI(component.calculateRegularBoundingBox());
         ImageUtilities.write(clonedImage, jointsImageFile);
 
         return new ComputedImage(count,
@@ -193,14 +199,14 @@ public class Main {
         // Trains the assigner
         for (ComputedImage trainingImage : trainingImages) {
             if (isFront) {
-                trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage));
+                trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage).concatenate(extractJointsFV(trainingImage)));
             } else {
                 trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage).concatenate(extractJointsFV(trainingImage)));
             }
         }
         for (ComputedImage testingImage : testingImages) {
             if (isFront) {
-                testingImage.setExtractedFeature(extractSilhouetteFV(testingImage));
+                testingImage.setExtractedFeature(extractSilhouetteFV(testingImage).concatenate(extractJointsFV(testingImage)));
             } else {
                 testingImage.setExtractedFeature(extractSilhouetteFV(testingImage).concatenate(extractJointsFV(testingImage)));
             }
@@ -274,13 +280,14 @@ public class Main {
             jointRadii.add(radius);
         }
 
+        // Face, shoulders, elbows, hips, legs and feet joints
         double[] array1 = new double[17];
-        for (int i = 16; i >= 0; i--) {
-            try {
-                array1[i] = jointRadii.get(i);
-            } catch (Exception e) {
-                array1[i] = 0;
-            }
+        for (int i = 0; i < 9; i++) {
+            array1[i] = jointRadii.get(i);
+        }
+        Collections.reverse(jointRadii);
+        for (int i = 9; i < 15; i++) {
+            array1[i] = jointRadii.get(i - 9);
         }
         return new DoubleFV(array1).normaliseFV();
     }
