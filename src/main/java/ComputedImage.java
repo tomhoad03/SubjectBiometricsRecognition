@@ -88,14 +88,19 @@ public class ComputedImage {
         double width = this.image.getWidth(), height = this.image.getHeight();
         double centroidX = this.centroid.getX() / width, centroidY = this.centroid.getY() / height;
 
+        ArrayList<Pixel> jointPixels = new ArrayList<>();
+
         for (Joints.Joint joint : joints) {
             Pixel pixel = new Pixel((int) (joint.getX() * width), (int) (joint.getY() * height));
             double radius = Math.sqrt(Math.pow(pixel.getX() - centroidX, 2) + Math.pow(pixel.getY() - centroidY, 2));
             jointRadii.add(radius);
+            jointPixels.add(pixel);
         }
 
-        // Face, shoulders, elbows, hips, legs and feet joints
-        double[] array1 = new double[17];
+        // Invariant features to centroid
+        double[] array1 = new double[15];
+        double[] array2 = new double[4];
+        double[] array3 = new double[4];
         for (int i = 0; i < 9; i++) {
             array1[i] = jointRadii.get(i);
         }
@@ -103,6 +108,19 @@ public class ComputedImage {
         for (int i = 9; i < 15; i++) {
             array1[i] = jointRadii.get(i - 9);
         }
+
+        // Inter-face distances
+        array2[0] = Math.sqrt(Math.pow(jointPixels.get(4).getX() - jointPixels.get(2).getX(), 2) + Math.pow(jointPixels.get(4).getY() - jointPixels.get(2).getY(), 2));
+        array2[1] = Math.sqrt(Math.pow(jointPixels.get(2).getX() - jointPixels.get(0).getX(), 2) + Math.pow(jointPixels.get(2).getY() - jointPixels.get(0).getY(), 2));
+        array2[2] = Math.sqrt(Math.pow(jointPixels.get(0).getX() - jointPixels.get(1).getX(), 2) + Math.pow(jointPixels.get(0).getY() - jointPixels.get(1).getY(), 2));
+        array2[3] = Math.sqrt(Math.pow(jointPixels.get(1).getX() - jointPixels.get(3).getX(), 2) + Math.pow(jointPixels.get(1).getY() - jointPixels.get(3).getY(), 2));
+
+        // Body width
+        array3[0] = Math.sqrt(Math.pow(jointPixels.get(6).getX() - jointPixels.get(5).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(5).getY(), 2));
+        array3[1] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 5).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 5).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2));
+        array3[2] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 3).getX() - jointPixels.get(jointPixels.size() - 4).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 3).getY() - jointPixels.get(jointPixels.size() - 4).getY(), 2));
+        array3[3] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 1).getX() - jointPixels.get(jointPixels.size() - 2).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 1).getY() - jointPixels.get(jointPixels.size() - 2).getY(), 2));
+
         return new DoubleFV(array1).normaliseFV();
     }
 
