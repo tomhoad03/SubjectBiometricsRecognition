@@ -34,7 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
-    private static final float SPEED_FACTOR = 0.25f; // 1f - Normal running, 0.25f - Fast running
+    private static final float SPEED_FACTOR = 1f; // 1f - Normal running, 0.25f - Fast running
     private static Predictor<Image, Joints> predictor;
 
     public static void main(String[] args) throws IOException, TranslateException {
@@ -170,7 +170,7 @@ public class Main {
         return new ComputedImage(count,
                 clonedImage, // The image (to be removed later)
                 component.calculateCentroidPixel(), // The persons centroid
-                component.calculateBoundaryDistanceFromCentre().toArray(), // Boundary distances
+                component.getOuterBoundary(), // Boundary pixels
                 new DoubleFV(component.calculateConvexHull().calculateSecondMomentCentralised()).normaliseFV(), // Second order centralised moment
                 joints); // Joint positions
     }
@@ -179,11 +179,11 @@ public class Main {
     static double classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
         // Trains the assigner
         for (ComputedImage trainingImage : trainingImages) {
-            trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage).concatenate(extractJointsFV(trainingImage)));
+            trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage).concatenate(extractJointsFV(trainingImage)).normaliseFV());
         }
 
         for (ComputedImage testingImage : testingImages) {
-            testingImage.setExtractedFeature(extractSilhouetteFV(testingImage).concatenate(extractJointsFV(testingImage)));
+            testingImage.setExtractedFeature(extractSilhouetteFV(testingImage).concatenate(extractJointsFV(testingImage)).normaliseFV());
         }
 
         // Nearest neighbour to find the closest training image to each testing image
@@ -219,21 +219,25 @@ public class Main {
 
     // Extract silhouette feature vector
     static DoubleFV extractSilhouetteFV(ComputedImage image) {
-        float[] floatDistances = image.getBoundaryDistances();
+        Pixel centroid = image.getCentroid();
+        int maxBins = 128, count = 0;
+        double[] doubleDistances = new double[maxBins];
 
-        ArrayList<Double> listDistances = new ArrayList<>();
-        for (float value : floatDistances) {
-            listDistances.add((double) value);
-        }
-        listDistances.sort(Double::compare);
+        ArrayList<Double> bin = new ArrayList<>();
+        for (Pixel pixel : image.getBoundaryPixels()) {
+            double xDiff = pixel.getX() - centroid.getX(), yDiff = pixel.getY() - centroid.getY();
+            double radius = Math.sqrt(Math.pow(xDiff, 2) + Math.pow(yDiff, 2));
+            double angle = Math.atan(yDiff / xDiff);
 
-        double[] doubleDistances = new double[5000];
-        for (int i = 4999; i >= 0; i--) {
+            bin.add(radius);
 
-            try {
-                doubleDistances[i] = listDistances.get(i);
-            } catch (Exception e) {
-                doubleDistances[i] = 0;
+            if (angle > (((2 * Math.PI) / maxBins) * (count + 1))) {
+                double sum = 0;
+                for (double value : bin) {
+                    sum += value;
+                }
+                doubleDistances[count] = sum / bin.size();
+                bin.clear();
             }
         }
         return new DoubleFV(doubleDistances).normaliseFV();
@@ -243,7 +247,7 @@ public class Main {
     static DoubleFV extractJointsFV(ComputedImage image) {
         List<Joints.Joint> joints = image.getJoints().getJoints();
         ArrayList<Double> jointRadii = new ArrayList<>();
-        double centroidX = image.getCentroid().getX() / image.getImage().getWidth(), centroidY =  image.getCentroid().getY() / image.getImage().getHeight();
+        double centroidX = image.getCentroid().getX() / image.getImage().getWidth(), centroidY = image.getCentroid().getY() / image.getImage().getHeight();
 
         for (Joints.Joint joint : joints) {
             double xDiff = joint.getX() - centroidX, yDiff = joint.getY() - centroidY;
