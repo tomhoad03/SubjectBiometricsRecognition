@@ -34,7 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
-    private static final float SPEED_FACTOR = 1f; // 1f - Normal running, 0.25f - Fast running
+    private static final float SPEED_FACTOR = 0.25f; // 1f - Normal running, 0.25f - Fast running
     private static Predictor<Image, Joints> predictor;
 
     public static void main(String[] args) throws IOException, TranslateException {
@@ -88,8 +88,8 @@ public class Main {
             count++;
         }
 
-        double correctClassificationCountFront = classifyImages(trainingImagesFront, testingImagesFront);
-        double correctClassificationCountSide = classifyImages(trainingImagesSide, testingImagesSide);
+        double correctClassificationCountFront = classifyImages(trainingImagesFront, testingImagesFront, true);
+        double correctClassificationCountSide = classifyImages(trainingImagesSide, testingImagesSide, false);
 
         // Print the results
         System.out.println("Finished!"
@@ -176,14 +176,21 @@ public class Main {
     }
 
     // Classifies the dataset
-    static double classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
+    static double classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages, boolean isFront) {
         // Trains the assigner
         for (ComputedImage trainingImage : trainingImages) {
-            trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage).concatenate(extractJointsFV(trainingImage)).normaliseFV());
+            if (isFront) {
+                trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage));
+            } else {
+                trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage).concatenate(extractJointsFV(trainingImage)));
+            }
         }
-
         for (ComputedImage testingImage : testingImages) {
-            testingImage.setExtractedFeature(extractSilhouetteFV(testingImage).concatenate(extractJointsFV(testingImage)).normaliseFV());
+            if (isFront) {
+                testingImage.setExtractedFeature(extractSilhouetteFV(testingImage));
+            } else {
+                testingImage.setExtractedFeature(extractSilhouetteFV(testingImage).concatenate(extractJointsFV(testingImage)));
+            }
         }
 
         // Nearest neighbour to find the closest training image to each testing image
