@@ -33,6 +33,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
+    private static final Float[][] colours = new Float[][]{RGBColour.RED, RGBColour.ORANGE, RGBColour.YELLOW, RGBColour.GREEN, RGBColour.CYAN, RGBColour.BLUE, RGBColour.MAGENTA};
+    private static final String[] bodyParts = new String[]{"Nose", "Right Eye", "Left Eye", "Right Ear", "Left Ear", "Right Shoulder", "Left Shoulder", "Right Elbow", "Left Elbow", "Right Hand/Wrist", "Left Hand/Wrist", "Right Hip", "Left Hip", "Right Knee", "Left Knee", "Right Foot", "Left Foot"};
     private static final float SPEED_FACTOR = 1f; // 1f - Normal running, 0.25f - Fast running
     private static Predictor<Image, Joints> predictor;
 
@@ -165,7 +167,6 @@ public class Main {
         Image jointsImage = BufferedImageFactory.getInstance().fromImage(ImageIO.read(imageFile));
         Joints joints = predictor.predict(jointsImage);
 
-        Float[][] colours = new Float[][]{RGBColour.RED, RGBColour.ORANGE, RGBColour.YELLOW, RGBColour.GREEN, RGBColour.CYAN, RGBColour.BLUE, RGBColour.MAGENTA, RGBColour.PINK, RGBColour.WHITE, RGBColour.LIGHT_GRAY, RGBColour.GRAY, RGBColour.DARK_GRAY, RGBColour.BLACK};
         int countColour = 0;
         for (Joints.Joint joint : joints.getJoints()) {
             Pixel pixel = new Pixel((int) (joint.getX() * clonedImage.getWidth()), (int) (joint.getY() * clonedImage.getHeight()));
@@ -173,6 +174,8 @@ public class Main {
 
             if (countColour < colours.length - 1) {
                 countColour++;
+            } else {
+                countColour = 0;
             }
         }
         ImageUtilities.write(clonedImage, jointsImageFile);
