@@ -6,7 +6,6 @@ import ai.djl.modality.cv.output.Joints;
 import ai.djl.repository.zoo.Criteria;
 import ai.djl.translate.TranslateException;
 import org.openimaj.data.dataset.VFSListDataset;
-import org.openimaj.feature.DoubleFV;
 import org.openimaj.feature.DoubleFVComparison;
 import org.openimaj.image.ImageUtilities;
 import org.openimaj.image.MBFImage;
@@ -36,7 +35,7 @@ public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
     private static final Float[][] colours = new Float[][]{RGBColour.RED, RGBColour.ORANGE, RGBColour.YELLOW, RGBColour.GREEN, RGBColour.CYAN, RGBColour.BLUE, RGBColour.MAGENTA};
     private static final String[] bodyParts = new String[]{"Nose", "Right Eye", "Left Eye", "Right Ear", "Left Ear", "Right Shoulder", "Left Shoulder", "Right Elbow", "Left Elbow", "Right Hand/Wrist", "Left Hand/Wrist", "Right Hip", "Left Hip", "Right Knee", "Left Knee", "Right Foot", "Left Foot"};
-    private static final float SPEED_FACTOR = 1f; // 1f - Normal running, 0.25f - Fast running
+    private static final float SPEED_FACTOR = 0.25f; // 1f - Normal running, 0.25f - Fast running
     private static Predictor<Image, Joints> predictor;
 
     public static void main(String[] args) throws IOException, TranslateException {
@@ -90,8 +89,8 @@ public class Main {
             count++;
         }
 
-        double correctClassificationCountFront = classifyImages(trainingImagesFront, testingImagesFront, true);
-        double correctClassificationCountSide = classifyImages(trainingImagesSide, testingImagesSide, false);
+        double correctClassificationCountFront = classifyImages(trainingImagesFront, testingImagesFront);
+        double correctClassificationCountSide = classifyImages(trainingImagesSide, testingImagesSide);
 
         // Print the results
         System.out.println("Finished!"
@@ -190,26 +189,19 @@ public class Main {
                 clonedImage, // The image (to be removed later)
                 component.calculateCentroidPixel(), // The persons centroid
                 component.getOuterBoundary(), // Boundary pixels
-                new DoubleFV(component.calculateConvexHull().calculateSecondMomentCentralised()).normaliseFV(), // Second order centralised moment
+                component.calculateConvexHull().calculateFirstMoment(), // first order moment
+                component.calculateConvexHull().calculateSecondMomentCentralised(), // Second order centralised moment
                 joints); // Joint positions
     }
 
     // Classifies the dataset
-    static double classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages, boolean isFront) {
+    static double classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
         // Trains the assigner
         for (ComputedImage trainingImage : trainingImages) {
-            if (isFront) {
-                trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage).concatenate(extractJointsFV(trainingImage)));
-            } else {
-                trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage).concatenate(extractJointsFV(trainingImage)));
-            }
+            trainingImage.extractFeature();
         }
         for (ComputedImage testingImage : testingImages) {
-            if (isFront) {
-                testingImage.setExtractedFeature(extractSilhouetteFV(testingImage).concatenate(extractJointsFV(testingImage)));
-            } else {
-                testingImage.setExtractedFeature(extractSilhouetteFV(testingImage).concatenate(extractJointsFV(testingImage)));
-            }
+            testingImage.extractFeature();
         }
 
         // Nearest neighbour to find the closest training image to each testing image
@@ -219,12 +211,8 @@ public class Main {
             ComputedImage nearestImage = null;
             double nearestDistance = -1;
 
-            // K-Nearest Neighbours based on second order centralised moment
-            trainingImages.sort(Comparator.comparingDouble(o -> DoubleFVComparison.EUCLIDEAN.compare(o.getSecondCentralisedMoment(), testingImage.getSecondCentralisedMoment())));
-            List<ComputedImage> kNearestTrainingImages = trainingImages.subList(0, trainingImages.size() / 2);
-
             // Finds the nearest image
-            for (ComputedImage trainingImage : kNearestTrainingImages) {
+            for (ComputedImage trainingImage : trainingImages) {
                 double distance = DoubleFVComparison.EUCLIDEAN.compare(trainingImage.getExtractedFeature(), testingImage.getExtractedFeature());
 
                 if (nearestDistance == -1 || distance < nearestDistance) {
@@ -239,57 +227,6 @@ public class Main {
             }
         }
         return correctClassificationCount;
-    }
-
-    // Extract silhouette feature vector
-    static DoubleFV extractSilhouetteFV(ComputedImage image) {
-        Pixel centroid = image.getCentroid();
-        int maxBins = 128, count = 0;
-        double[] doubleDistances = new double[maxBins];
-
-        ArrayList<Double> bin = new ArrayList<>();
-        for (Pixel pixel : image.getBoundaryPixels()) {
-            double xDiff = pixel.getX() - centroid.getX(), yDiff = pixel.getY() - centroid.getY();
-            double radius = Math.sqrt(Math.pow(xDiff, 2) + Math.pow(yDiff, 2));
-            double angle = Math.atan(yDiff / xDiff);
-
-            bin.add(radius);
-
-            if (angle > (((2 * Math.PI) / maxBins) * (count + 1))) {
-                double sum = 0;
-                for (double value : bin) {
-                    sum += value;
-                }
-                doubleDistances[count] = sum / bin.size();
-                bin.clear();
-            }
-        }
-        return new DoubleFV(doubleDistances).normaliseFV();
-    }
-
-    // Extract joints feature vector
-    static DoubleFV extractJointsFV(ComputedImage image) {
-        List<Joints.Joint> joints = image.getJoints().getJoints();
-        ArrayList<Double> jointRadii = new ArrayList<>();
-        double width = image.getImage().getWidth(), height = image.getImage().getHeight();
-        double centroidX = image.getCentroid().getX() / width, centroidY = image.getCentroid().getY() / height;
-
-        for (Joints.Joint joint : joints) {
-            Pixel pixel = new Pixel((int) (joint.getX() * width), (int) (joint.getY() * height));
-            double radius = Math.sqrt(Math.pow(pixel.getX() - centroidX, 2) + Math.pow(pixel.getY() - centroidY, 2));
-            jointRadii.add(radius);
-        }
-
-        // Face, shoulders, elbows, hips, legs and feet joints
-        double[] array1 = new double[17];
-        for (int i = 0; i < 9; i++) {
-            array1[i] = jointRadii.get(i);
-        }
-        Collections.reverse(jointRadii);
-        for (int i = 9; i < 15; i++) {
-            array1[i] = jointRadii.get(i - 9);
-        }
-        return new DoubleFV(array1).normaliseFV();
     }
 
     // CCR test - not used in classification
