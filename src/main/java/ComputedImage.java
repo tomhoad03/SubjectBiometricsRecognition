@@ -45,20 +45,24 @@ public class ComputedImage {
         ArrayList<PolarPixel> pixels = new ArrayList<>();
 
         for (Pixel pixel : this.boundaryPixels) {
-            if (pixel.getX() == 59 || pixel.getY() == 175) {
-                System.out.println("test");
-            }
-
             double xDiff = pixel.getX() - this.centroid.getX(), yDiff = pixel.getY() - this.centroid.getY();
             double radius = Math.sqrt(Math.pow(xDiff, 2) + Math.pow(yDiff, 2));
             double angle = Math.atan(yDiff / xDiff);
 
-            if (xDiff < 0 && (yDiff > 0 || yDiff < 0)) {
+            if (xDiff < 0) {
                 angle += Math.PI;
             } else if (xDiff > 0 && yDiff < 0) {
-                angle += (2 * Math.PI);
+                angle += 2 * Math.PI;
             }
-
+            if (xDiff == 0 && yDiff > 0) {
+                angle = Math.PI / 2;
+            } else if (xDiff == 0 && yDiff < 0) {
+                angle = 3 * (Math.PI / 2);
+            } else if (xDiff < 0 && yDiff == 0) {
+                angle = Math.PI;
+            } else if (xDiff > 0 && yDiff == 0) {
+                angle = 0;
+            }
             pixels.add(new PolarPixel(radius, angle, pixel));
         }
         pixels.sort(Comparator.comparingDouble(o -> o.angle));
@@ -66,12 +70,13 @@ public class ComputedImage {
         ArrayList<Double> bin = new ArrayList<>();
         for (PolarPixel pixel : pixels) {
             bin.add(pixel.radius);
-            if (pixel.angle > (((2 * Math.PI) / maxBins) * (count + 1))) {
+            if ((pixel.angle > (((2 * Math.PI) / maxBins) * (count + 1))) || pixel == pixels.get(pixels.size() - 1)) {
                 double sum = 0;
                 for (double value : bin) {
                     sum += value;
                 }
                 doubleDistances[count] = sum / bin.size();
+                count++;
                 bin.clear();
             }
         }
