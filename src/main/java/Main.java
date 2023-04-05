@@ -8,10 +8,10 @@ import ai.djl.translate.TranslateException;
 import org.openimaj.data.dataset.VFSListDataset;
 import org.openimaj.feature.DoubleFV;
 import org.openimaj.feature.DoubleFVComparison;
-import org.openimaj.image.DisplayUtilities;
 import org.openimaj.image.ImageUtilities;
 import org.openimaj.image.MBFImage;
 import org.openimaj.image.colour.ColourSpace;
+import org.openimaj.image.colour.RGBColour;
 import org.openimaj.image.connectedcomponent.GreyscaleConnectedComponentLabeler;
 import org.openimaj.image.pixel.ConnectedComponent;
 import org.openimaj.image.pixel.Pixel;
@@ -27,14 +27,13 @@ import org.openimaj.util.pair.IntFloatPair;
 import javax.imageio.ImageIO;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
-    private static final float SPEED_FACTOR = 0.25f; // 1f - Normal running, 0.25f - Fast running
+    private static final float SPEED_FACTOR = 1f; // 1f - Normal running, 0.25f - Fast running
     private static Predictor<Image, Joints> predictor;
 
     public static void main(String[] args) throws IOException, TranslateException {
@@ -93,9 +92,9 @@ public class Main {
 
         // Print the results
         System.out.println("Finished!"
-                + "\n" + "Front Classification Accuracy = " + ((correctClassificationCountFront / 11f) * 100f) + "%"
-                + "\n" + "Side Classification Accuracy = " + ((correctClassificationCountSide / 11f) * 100f) + "%"
-                + "\n" + "Correct Classification Rate (CCR) = " + (((correctClassificationCountFront + correctClassificationCountSide) / 22f) * 100f) + "%");
+                + "\n" + "Front Classification Accuracy = " + (((float) correctClassificationCountFront / 11f) * 100f) + "%"
+                + "\n" + "Side Classification Accuracy = " + (((float)correctClassificationCountSide / 11f) * 100f) + "%"
+                + "\n" + "Correct Classification Rate (CCR) = " + ((((float) (correctClassificationCountFront + correctClassificationCountSide)) / 22f) * 100f) + "%");
     }
 
     static ComputedImage readImage(MBFImage image, int count, boolean isTraining) throws IOException, TranslateException {
@@ -160,12 +159,23 @@ public class Main {
         // Find the joints of training images
         String resultPath = isTraining ? "training" : "testing";
         File imageFile = new File(PATH + "computed\\" + resultPath + "\\" + count + ".jpg");
+        File jointsImageFile = new File(PATH + "joints\\" + resultPath + "\\" + count + ".jpg");
         ImageUtilities.write(clonedImage, imageFile);
-        Image jointsImage = BufferedImageFactory.getInstance().fromImage(ImageIO.read(imageFile));
 
+        Image jointsImage = BufferedImageFactory.getInstance().fromImage(ImageIO.read(imageFile));
         Joints joints = predictor.predict(jointsImage);
-        jointsImage.drawJoints(joints);
-        jointsImage.save(Files.newOutputStream(Paths.get(PATH + "joints\\" + resultPath + "\\" + count + ".png")), "png");
+
+        Float[][] colours = new Float[][]{RGBColour.RED, RGBColour.ORANGE, RGBColour.YELLOW, RGBColour.GREEN, RGBColour.CYAN, RGBColour.BLUE, RGBColour.MAGENTA, RGBColour.PINK, RGBColour.WHITE, RGBColour.LIGHT_GRAY, RGBColour.GRAY, RGBColour.DARK_GRAY, RGBColour.BLACK};
+        int countColour = 0;
+        for (Joints.Joint joint : joints.getJoints()) {
+            Pixel pixel = new Pixel((int) (joint.getX() * clonedImage.getWidth()), (int) (joint.getY() * clonedImage.getHeight()));
+            clonedImage.drawPoint(pixel, colours[countColour], 5);
+
+            if (countColour < colours.length - 1) {
+                countColour++;
+            }
+        }
+        ImageUtilities.write(clonedImage, jointsImageFile);
 
         return new ComputedImage(count,
                 clonedImage, // The image (to be removed later)
@@ -216,8 +226,6 @@ public class Main {
 
             // Checks classification accuracy
             if (nearestImage != null && classificationTest(testingImage.getId(), nearestImage.getId())) {
-                DisplayUtilities.display(testingImage.getImage());
-                DisplayUtilities.display(nearestImage.getImage());
                 correctClassificationCount += 1f;
             }
         }
@@ -254,14 +262,14 @@ public class Main {
     static DoubleFV extractJointsFV(ComputedImage image) {
         List<Joints.Joint> joints = image.getJoints().getJoints();
         ArrayList<Double> jointRadii = new ArrayList<>();
-        double centroidX = image.getCentroid().getX() / image.getImage().getWidth(), centroidY = image.getCentroid().getY() / image.getImage().getHeight();
+        double width = image.getImage().getWidth(), height = image.getImage().getHeight();
+        double centroidX = image.getCentroid().getX() / width, centroidY = image.getCentroid().getY() / height;
 
         for (Joints.Joint joint : joints) {
-            double xDiff = joint.getX() - centroidX, yDiff = joint.getY() - centroidY;
-            double radius = Math.sqrt(Math.pow(xDiff, 2) + Math.pow(yDiff, 2));
+            Pixel pixel = new Pixel((int) (joint.getX() * width), (int) (joint.getY() * height));
+            double radius = Math.sqrt(Math.pow(pixel.getX() - centroidX, 2) + Math.pow(pixel.getY() - centroidY, 2));
             jointRadii.add(radius);
         }
-        jointRadii.sort(Double::compare);
 
         double[] array1 = new double[17];
         for (int i = 16; i >= 0; i--) {
