@@ -34,7 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
-    private static final float SPEED_FACTOR = 1f; // 1f - Normal running, 0.25f - Fast running
+    private static final float SPEED_FACTOR = 0.25f; // 1f - Normal running, 0.25f - Fast running
     private static Predictor<Image, Joints> predictor;
 
     public static void main(String[] args) throws IOException, TranslateException {
@@ -88,8 +88,8 @@ public class Main {
             count++;
         }
 
-        double correctClassificationCountFront = classifyImages(trainingImagesFront, testingImagesFront);
-        double correctClassificationCountSide = classifyImages(trainingImagesSide, testingImagesSide);
+        double correctClassificationCountFront = classifyImages(trainingImagesFront, testingImagesFront, true);
+        double correctClassificationCountSide = classifyImages(trainingImagesSide, testingImagesSide, false);
 
         // Print the results
         System.out.println("Finished!"
@@ -170,20 +170,27 @@ public class Main {
         return new ComputedImage(count,
                 clonedImage, // The image (to be removed later)
                 component.calculateCentroidPixel(), // The persons centroid
-                component.calculateBoundaryDistanceFromCentre().toArray(), // Boundary distances
+                component.getOuterBoundary(), // Boundary pixels
                 new DoubleFV(component.calculateConvexHull().calculateSecondMomentCentralised()).normaliseFV(), // Second order centralised moment
                 joints); // Joint positions
     }
 
     // Classifies the dataset
-    static double classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
+    static double classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages, boolean isFront) {
         // Trains the assigner
         for (ComputedImage trainingImage : trainingImages) {
-            trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage).concatenate(extractJointsFV(trainingImage)));
+            if (isFront) {
+                trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage));
+            } else {
+                trainingImage.setExtractedFeature(extractSilhouetteFV(trainingImage).concatenate(extractJointsFV(trainingImage)));
+            }
         }
-
         for (ComputedImage testingImage : testingImages) {
-            testingImage.setExtractedFeature(extractSilhouetteFV(testingImage).concatenate(extractJointsFV(testingImage)));
+            if (isFront) {
+                testingImage.setExtractedFeature(extractSilhouetteFV(testingImage));
+            } else {
+                testingImage.setExtractedFeature(extractSilhouetteFV(testingImage).concatenate(extractJointsFV(testingImage)));
+            }
         }
 
         // Nearest neighbour to find the closest training image to each testing image
@@ -219,74 +226,53 @@ public class Main {
 
     // Extract silhouette feature vector
     static DoubleFV extractSilhouetteFV(ComputedImage image) {
-        float[] array = image.getBoundaryDistances();
+        Pixel centroid = image.getCentroid();
+        int maxBins = 128, count = 0;
+        double[] doubleDistances = new double[maxBins];
 
-        ArrayList<Double> arrayList = new ArrayList<>();
-        for (float value : array) {
-            arrayList.add((double) value);
-        }
+        ArrayList<Double> bin = new ArrayList<>();
+        for (Pixel pixel : image.getBoundaryPixels()) {
+            double xDiff = pixel.getX() - centroid.getX(), yDiff = pixel.getY() - centroid.getY();
+            double radius = Math.sqrt(Math.pow(xDiff, 2) + Math.pow(yDiff, 2));
+            double angle = Math.atan(yDiff / xDiff);
 
-        Random rand = new Random();
-        int i = 0, maxSize = (int) (2200 * SPEED_FACTOR);
-        while (arrayList.size() > maxSize) {
-            if (i == 64) {
-                i = 0;
+            bin.add(radius);
+
+            if (angle > (((2 * Math.PI) / maxBins) * (count + 1))) {
+                double sum = 0;
+                for (double value : bin) {
+                    sum += value;
+                }
+                doubleDistances[count] = sum / bin.size();
+                bin.clear();
             }
-            int subSize = arrayList.size() / 64;
-            arrayList.remove(rand.nextInt(i * subSize, (i + 1) * subSize));
-            i++;
         }
-
-        double[] array2 = new double[maxSize];
-        for (int j = 0; j < maxSize; j++) {
-            array2[j] = arrayList.get(j);
-        }
-        return new DoubleFV(array2).normaliseFV();
+        return new DoubleFV(doubleDistances).normaliseFV();
     }
 
     // Extract joints feature vector
     static DoubleFV extractJointsFV(ComputedImage image) {
         List<Joints.Joint> joints = image.getJoints().getJoints();
-        ArrayList<AngledJoint> angledJoints = new ArrayList<>();
-        double centroidX = image.getCentroid().getX() / image.getImage().getWidth(), centroidY =  image.getCentroid().getY() / image.getImage().getHeight();
+        ArrayList<Double> jointRadii = new ArrayList<>();
+        double centroidX = image.getCentroid().getX() / image.getImage().getWidth(), centroidY = image.getCentroid().getY() / image.getImage().getHeight();
 
         for (Joints.Joint joint : joints) {
             double xDiff = joint.getX() - centroidX, yDiff = joint.getY() - centroidY;
             double radius = Math.sqrt(Math.pow(xDiff, 2) + Math.pow(yDiff, 2));
-            double angle = Math.atan(yDiff / xDiff);
-
-            if (xDiff < 0 && (yDiff > 0 || yDiff < 0)) {
-                angle += Math.PI;
-            } else if (xDiff > 0 && yDiff < 0) {
-                angle += (2 * Math.PI);
-            }
-
-            angledJoints.add(new AngledJoint(radius, angle));
+            jointRadii.add(radius);
         }
-        angledJoints.sort(Comparator.comparingDouble(o -> o.radius));
+        jointRadii.sort(Double::compare);
 
         double[] array1 = new double[17];
-        for (int i = 0; i < 17; i++) {
+        for (int i = 16; i >= 0; i--) {
             try {
-                array1[i] = angledJoints.get(i).radius;
+                array1[i] = jointRadii.get(i);
             } catch (Exception e) {
                 array1[i] = 0;
             }
         }
-
-        double[] array2 = new double[17];
-        for (int i = 0; i < 17; i++) {
-            try {
-                array2[i] = angledJoints.get(i).angle;
-            } catch (Exception e) {
-                array2[i] = 0;
-            }
-        }
-
         return new DoubleFV(array1).normaliseFV();
     }
-
-    public record AngledJoint(double radius, double angle) { }
 
     // CCR test - not used in classification
     static boolean classificationTest(int testingId, int trainingId) {
