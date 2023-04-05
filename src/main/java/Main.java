@@ -34,7 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
-    private static final float SPEED_FACTOR = 1f; // 1f - Normal running, 0.25f - Fast running
+    private static final float SPEED_FACTOR = 0.25f; // 1f - Normal running, 0.25f - Fast running
     private static Predictor<Image, Joints> predictor;
 
     public static void main(String[] args) throws IOException, TranslateException {
@@ -219,73 +219,49 @@ public class Main {
 
     // Extract silhouette feature vector
     static DoubleFV extractSilhouetteFV(ComputedImage image) {
-        float[] array = image.getBoundaryDistances();
+        float[] floatDistances = image.getBoundaryDistances();
 
-        ArrayList<Double> arrayList = new ArrayList<>();
-        for (float value : array) {
-            arrayList.add((double) value);
+        ArrayList<Double> listDistances = new ArrayList<>();
+        for (float value : floatDistances) {
+            listDistances.add((double) value);
         }
+        listDistances.sort(Double::compare);
 
-        Random rand = new Random();
-        int i = 0, maxSize = (int) (2200 * SPEED_FACTOR);
-        while (arrayList.size() > maxSize) {
-            if (i == 64) {
-                i = 0;
+        double[] doubleDistances = new double[5000];
+        for (int i = 4999; i >= 0; i--) {
+
+            try {
+                doubleDistances[i] = listDistances.get(i);
+            } catch (Exception e) {
+                doubleDistances[i] = 0;
             }
-            int subSize = arrayList.size() / 64;
-            arrayList.remove(rand.nextInt(i * subSize, (i + 1) * subSize));
-            i++;
         }
-
-        double[] array2 = new double[maxSize];
-        for (int j = 0; j < maxSize; j++) {
-            array2[j] = arrayList.get(j);
-        }
-        return new DoubleFV(array2).normaliseFV();
+        return new DoubleFV(doubleDistances).normaliseFV();
     }
 
     // Extract joints feature vector
     static DoubleFV extractJointsFV(ComputedImage image) {
         List<Joints.Joint> joints = image.getJoints().getJoints();
-        ArrayList<AngledJoint> angledJoints = new ArrayList<>();
+        ArrayList<Double> jointRadii = new ArrayList<>();
         double centroidX = image.getCentroid().getX() / image.getImage().getWidth(), centroidY =  image.getCentroid().getY() / image.getImage().getHeight();
 
         for (Joints.Joint joint : joints) {
             double xDiff = joint.getX() - centroidX, yDiff = joint.getY() - centroidY;
             double radius = Math.sqrt(Math.pow(xDiff, 2) + Math.pow(yDiff, 2));
-            double angle = Math.atan(yDiff / xDiff);
-
-            if (xDiff < 0 && (yDiff > 0 || yDiff < 0)) {
-                angle += Math.PI;
-            } else if (xDiff > 0 && yDiff < 0) {
-                angle += (2 * Math.PI);
-            }
-
-            angledJoints.add(new AngledJoint(radius, angle));
+            jointRadii.add(radius);
         }
-        angledJoints.sort(Comparator.comparingDouble(o -> o.radius));
+        jointRadii.sort(Double::compare);
 
         double[] array1 = new double[17];
-        for (int i = 0; i < 17; i++) {
+        for (int i = 16; i >= 0; i--) {
             try {
-                array1[i] = angledJoints.get(i).radius;
+                array1[i] = jointRadii.get(i);
             } catch (Exception e) {
                 array1[i] = 0;
             }
         }
-
-        double[] array2 = new double[17];
-        for (int i = 0; i < 17; i++) {
-            try {
-                array2[i] = angledJoints.get(i).angle;
-            } catch (Exception e) {
-                array2[i] = 0;
-            }
-        }
-        return new DoubleFV(array1).normaliseFV().concatenate(new DoubleFV(array2).normaliseFV());
+        return new DoubleFV(array1).normaliseFV();
     }
-
-    public record AngledJoint(double radius, double angle) { }
 
     // CCR test - not used in classification
     static boolean classificationTest(int testingId, int trainingId) {
