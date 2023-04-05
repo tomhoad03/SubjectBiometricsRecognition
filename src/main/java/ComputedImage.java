@@ -1,6 +1,4 @@
 import ai.djl.modality.cv.output.Joints;
-import org.checkerframework.checker.units.qual.A;
-import org.checkerframework.checker.units.qual.C;
 import org.openimaj.feature.DoubleFV;
 import org.openimaj.image.MBFImage;
 import org.openimaj.image.pixel.Pixel;
@@ -15,17 +13,15 @@ public class ComputedImage {
     private final MBFImage image;
     private final Pixel centroid;
     private final List<Pixel> boundaryPixels;
-    private final double[] firstMoment;
     private final double[] secondCentralisedMoment;
     private final Joints joints;
     private DoubleFV extractedFeature;
 
-    public ComputedImage(int id, MBFImage image, Pixel centroid, List<Pixel> boundaryPixels, double[] firstMoment, double[] secondCentralisedMoment, Joints joints) {
+    public ComputedImage(int id, MBFImage image, Pixel centroid, List<Pixel> boundaryPixels, double[] secondCentralisedMoment, Joints joints) {
         this.id = id;
         this.image = image;
         this.centroid = centroid;
         this.boundaryPixels = boundaryPixels;
-        this.firstMoment = firstMoment;
         this.secondCentralisedMoment = secondCentralisedMoment;
         this.joints = joints;
     }
@@ -35,7 +31,7 @@ public class ComputedImage {
     }
 
     public void extractFeature() {
-        this.extractedFeature = extractSilhouetteFV().concatenate(extractJointsFV().concatenate(extractMomentsFV()));
+        this.extractedFeature = extractSilhouetteFV().concatenate(extractJointsFV()); // .concatenate(extractMomentsFV()));
     }
 
     // Extract silhouette feature vector
