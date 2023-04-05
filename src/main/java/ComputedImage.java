@@ -123,11 +123,11 @@ public class ComputedImage {
         array3[2] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 3).getX() - jointPixels.get(jointPixels.size() - 4).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 3).getY() - jointPixels.get(jointPixels.size() - 4).getY(), 2));
         array3[3] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 1).getX() - jointPixels.get(jointPixels.size() - 2).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 1).getY() - jointPixels.get(jointPixels.size() - 2).getY(), 2));
 
-        DoubleFV featureVector = new DoubleFV(array1).normaliseFV();
+        DoubleFV featureVector = new DoubleFV(array1);
         if (isFront) {
-            return featureVector; //.concatenate(new DoubleFV(array2).normaliseFV()).concatenate(new DoubleFV(array3).normaliseFV());
+            return featureVector.concatenate(new DoubleFV(array2)).concatenate(new DoubleFV(array3)).normaliseFV();
         } else {
-            return featureVector;
+            return featureVector.normaliseFV();
         }
     }
 
