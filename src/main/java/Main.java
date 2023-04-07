@@ -87,14 +87,15 @@ public class Main {
             count++;
         }
 
-        double correctClassificationCountFront = classifyImages(trainingImagesFront, testingImagesFront);
-        double correctClassificationCountSide = classifyImages(trainingImagesSide, testingImagesSide);
+        double[] frontClassificationResults = classifyImages(trainingImagesFront, testingImagesFront);
+        double[] sideClassificationResults = classifyImages(trainingImagesSide, testingImagesSide);
 
         // Print the results
-        System.out.println("Finished!"
-                + "\n" + "Front Classification Accuracy = " + (((float) correctClassificationCountFront / 11f) * 100f) + "%"
-                + "\n" + "Side Classification Accuracy = " + (((float) correctClassificationCountSide / 11f) * 100f) + "%"
-                + "\n" + "Correct Classification Rate (CCR) = " + ((((float) (correctClassificationCountFront + correctClassificationCountSide)) / 22f) * 100f) + "%");
+        System.out.println("Front Classification Accuracy = " + (float) ((frontClassificationResults[0] / 11f) * 100f) + "%"
+                + "\n" + "Side Classification Accuracy = " + (float) ((sideClassificationResults[0] / 11f) * 100f) + "%"
+                + "\n" + "Front Incorrect Accuracy: " + (float) ((frontClassificationResults[1] / (22f - frontClassificationResults[0])) * 100f) + "%"
+                + "\n" + "Side Incorrect Accuracy: " + (float) ((sideClassificationResults[1] / (22f - sideClassificationResults[0])) * 100f) + "%"
+                + "\n" + "Correct Classification Rate (CCR) = " + (float) (((frontClassificationResults[0] + sideClassificationResults[0]) / 22f) * 100f) + "%");
     }
 
     static ComputedImage readImage(MBFImage image, int count, boolean isTraining, boolean isFront) throws IOException, TranslateException {
@@ -188,12 +189,11 @@ public class Main {
                 isFront,
                 component.calculateCentroidPixel(), // The persons centroid
                 component.getOuterBoundary(), // Boundary pixels
-                component.calculateConvexHull().calculateSecondMomentCentralised(), // Second order centralised moment
                 joints); // Joint positions
     }
 
     // Classifies the dataset
-    static double classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
+    static double[] classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
         // Trains the assigner
         for (ComputedImage trainingImage : trainingImages) {
             trainingImage.extractFeature();
@@ -204,11 +204,11 @@ public class Main {
 
         // Nearest neighbour to find the closest training image to each testing image
         float correctClassificationCount = 0f;
+        double incorrectAccuracySum = 0f;
 
         for (ComputedImage testingImage : testingImages) {
             ComputedImage nearestImage = null;
-            double nearestDistance = -1, furthestDistance = -1;
-            System.out.println(testingImage.getId());
+            double nearestDistance = -1, furthestDistance = -1, correctDistance = 0f;
 
             // Finds the nearest image
             for (ComputedImage trainingImage : trainingImages) {
@@ -222,18 +222,18 @@ public class Main {
                 }
 
                 if (classificationTest(testingImage.getId(), trainingImage.getId())) {
-                    System.out.println("Classification distance: " + (float) distance);
+                    correctDistance = distance;
                 }
             }
-            System.out.println("Closest distance: " + (float) nearestDistance);
-            System.out.println("Furthest distance: " + (float) furthestDistance);
 
             // Checks classification accuracy
             if (nearestImage != null && classificationTest(testingImage.getId(), nearestImage.getId())) {
                 correctClassificationCount += 1f;
+            } else {
+                incorrectAccuracySum += ((correctDistance - nearestDistance) / (furthestDistance - correctDistance));
             }
         }
-        return correctClassificationCount;
+        return new double[]{correctClassificationCount, incorrectAccuracySum};
     }
 
     // CCR test - not used in classification

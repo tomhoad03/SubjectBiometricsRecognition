@@ -14,17 +14,15 @@ public class ComputedImage {
     private final Boolean isFront;
     private final Pixel centroid;
     private final List<Pixel> boundaryPixels;
-    private final double[] secondCentralisedMoment;
     private final Joints joints;
     private DoubleFV extractedFeature;
 
-    public ComputedImage(int id, MBFImage image, Boolean isFront, Pixel centroid, List<Pixel> boundaryPixels, double[] secondCentralisedMoment, Joints joints) {
+    public ComputedImage(int id, MBFImage image, Boolean isFront, Pixel centroid, List<Pixel> boundaryPixels, Joints joints) {
         this.id = id;
         this.image = image;
         this.isFront = isFront;
         this.centroid = centroid;
         this.boundaryPixels = boundaryPixels;
-        this.secondCentralisedMoment = secondCentralisedMoment;
         this.joints = joints;
     }
 
@@ -33,7 +31,7 @@ public class ComputedImage {
     }
 
     public void extractFeature() {
-        this.extractedFeature = extractSilhouetteFV().concatenate(extractJointsFV()); // .concatenate(extractMomentsFV()));
+        this.extractedFeature = extractSilhouetteFV().concatenate(extractJointsFV());
     }
 
     // Extract silhouette feature vector
@@ -133,11 +131,6 @@ public class ComputedImage {
         } else {
             return featureVector.normaliseFV();
         }
-    }
-
-    // Extract moments feature vector
-    public DoubleFV extractMomentsFV() {
-        return new DoubleFV(this.secondCentralisedMoment).normaliseFV();
     }
 
     public DoubleFV getExtractedFeature() {
