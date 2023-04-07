@@ -1,0 +1,92 @@
+2
+Classification distance: 0.020545004
+Closest distance: 0.011346429
+Furthest distance: 0.04453882
+4
+Classification distance: 0.02695061
+Closest distance: 0.026089879
+Furthest distance: 0.06142098
+6
+Classification distance: 0.024005953
+Closest distance: 0.020815259
+Furthest distance: 0.049066145
+8
+Classification distance: 0.020734118
+Closest distance: 0.010249778
+Furthest distance: 0.045315553
+10
+Classification distance: 0.026059065
+Closest distance: 0.019898975
+Furthest distance: 0.051119052
+12
+Classification distance: 0.01731791
+Closest distance: 0.01639476
+Furthest distance: 0.0455623
+14
+Classification distance: 0.03130629
+Closest distance: 0.027560502
+Furthest distance: 0.056235913
+16
+Classification distance: 0.026690623
+Closest distance: 0.02636608
+Furthest distance: 0.05034199
+18
+Classification distance: 0.016175885
+Closest distance: 0.013897718
+Furthest distance: 0.044663932
+20
+Classification distance: 0.015234493
+Closest distance: 0.012862213
+Furthest distance: 0.047699608
+22
+Classification distance: 0.03232479
+Closest distance: 0.03232479
+Furthest distance: 0.07707712
+1
+Classification distance: 0.021284183
+Closest distance: 0.015824826
+Furthest distance: 0.049963094
+3
+Classification distance: 0.03334286
+Closest distance: 0.016214462
+Furthest distance: 0.05780169
+5
+Classification distance: 0.012758947
+Closest distance: 0.012758947
+Furthest distance: 0.046431635
+7
+Classification distance: 0.012434399
+Closest distance: 0.011870055
+Furthest distance: 0.04400692
+9
+Classification distance: 0.012844536
+Closest distance: 0.012844536
+Furthest distance: 0.056636006
+11
+Classification distance: 0.01307369
+Closest distance: 0.01307369
+Furthest distance: 0.060310025
+13
+Classification distance: 0.016728127
+Closest distance: 0.016728127
+Furthest distance: 0.05569253
+15
+Classification distance: 0.009485413
+Closest distance: 0.009485413
+Furthest distance: 0.047065493
+17
+Classification distance: 0.014002084
+Closest distance: 0.009464931
+Furthest distance: 0.043040145
+19
+Classification distance: 0.010802061
+Closest distance: 0.010802061
+Furthest distance: 0.04688996
+21
+Classification distance: 0.030085048
+Closest distance: 0.01913368
+Furthest distance: 0.07477869
+Finished!
+Front Classification Accuracy = 9.090909%
+Side Classification Accuracy = 54.545456%
+Correct Classification Rate (CCR) = 31.818182%

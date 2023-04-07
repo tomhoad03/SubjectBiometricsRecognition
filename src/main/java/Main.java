@@ -93,7 +93,7 @@ public class Main {
         // Print the results
         System.out.println("Finished!"
                 + "\n" + "Front Classification Accuracy = " + (((float) correctClassificationCountFront / 11f) * 100f) + "%"
-                + "\n" + "Side Classification Accuracy = " + (((float)correctClassificationCountSide / 11f) * 100f) + "%"
+                + "\n" + "Side Classification Accuracy = " + (((float) correctClassificationCountSide / 11f) * 100f) + "%"
                 + "\n" + "Correct Classification Rate (CCR) = " + ((((float) (correctClassificationCountFront + correctClassificationCountSide)) / 22f) * 100f) + "%");
     }
 
@@ -207,7 +207,8 @@ public class Main {
 
         for (ComputedImage testingImage : testingImages) {
             ComputedImage nearestImage = null;
-            double nearestDistance = -1;
+            double nearestDistance = -1, furthestDistance = -1;
+            System.out.println(testingImage.getId());
 
             // Finds the nearest image
             for (ComputedImage trainingImage : trainingImages) {
@@ -216,8 +217,16 @@ public class Main {
                 if (nearestDistance == -1 || distance < nearestDistance) {
                     nearestDistance = distance;
                     nearestImage = trainingImage;
+                } else if (furthestDistance == -1 || distance > furthestDistance) {
+                    furthestDistance = distance;
+                }
+
+                if (classificationTest(testingImage.getId(), trainingImage.getId())) {
+                    System.out.println("Classification distance: " + (float) distance);
                 }
             }
+            System.out.println("Closest distance: " + (float) nearestDistance);
+            System.out.println("Furthest distance: " + (float) furthestDistance);
 
             // Checks classification accuracy
             if (nearestImage != null && classificationTest(testingImage.getId(), nearestImage.getId())) {
@@ -230,28 +239,28 @@ public class Main {
     // CCR test - not used in classification
     static boolean classificationTest(int testingId, int trainingId) {
         return switch (testingId) {
-            case 1 -> trainingId == 48;
-            case 2 -> trainingId == 47;
-            case 3 -> trainingId == 50;
-            case 4 -> trainingId == 49;
-            case 5 -> trainingId == 52;
-            case 6 -> trainingId == 51;
-            case 7 -> trainingId == 54;
-            case 8 -> trainingId == 53;
-            case 9 -> trainingId == 56;
-            case 10 -> trainingId == 55;
-            case 11 -> trainingId == 58;
-            case 12 -> trainingId == 57;
-            case 13 -> trainingId == 60;
-            case 14 -> trainingId == 59;
-            case 15 -> trainingId == 62;
-            case 16 -> trainingId == 61;
-            case 17 -> trainingId == 64;
-            case 18 -> trainingId == 63;
-            case 19 -> trainingId == 66;
-            case 20 -> trainingId == 65;
-            case 21 -> trainingId == 88;
-            case 22 -> trainingId == 87;
+            case 1 -> trainingId == 48; // n
+            case 2 -> trainingId == 47; // n
+            case 3 -> trainingId == 50; // n
+            case 4 -> trainingId == 49; // n
+            case 5 -> trainingId == 52; // y
+            case 6 -> trainingId == 51; // n
+            case 7 -> trainingId == 54; // n
+            case 8 -> trainingId == 53; // n
+            case 9 -> trainingId == 56; // y
+            case 10 -> trainingId == 55; // n
+            case 11 -> trainingId == 58; // y
+            case 12 -> trainingId == 57; // n
+            case 13 -> trainingId == 60; // y
+            case 14 -> trainingId == 59; // n
+            case 15 -> trainingId == 62; // y
+            case 16 -> trainingId == 61; // n
+            case 17 -> trainingId == 64; // n
+            case 18 -> trainingId == 63; // n
+            case 19 -> trainingId == 66; // y
+            case 20 -> trainingId == 65; // n
+            case 21 -> trainingId == 88; // n
+            case 22 -> trainingId == 87; // y
             default -> false;
         };
     }
