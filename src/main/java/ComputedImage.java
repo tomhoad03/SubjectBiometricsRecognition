@@ -36,7 +36,7 @@ public class ComputedImage {
 
     // Extract silhouette feature vector
     public DoubleFV extractSilhouetteFV() {
-        int maxBins = 64, count = 0;
+        int maxBins = 128, blankBinsSize = 8, count = 0;
         double[] doubleDistances = new double[maxBins];
         ArrayList<PolarPixel> pixels = new ArrayList<>();
 
@@ -71,7 +71,14 @@ public class ComputedImage {
                 for (double value : bin) {
                     sum += value;
                 }
-                doubleDistances[count] = sum / bin.size();
+                if (!isFront
+                        ||count < ((maxBins / 4) - blankBinsSize)
+                        || (count > ((maxBins / 4) + blankBinsSize) && count < ((3 * (maxBins / 4)) - blankBinsSize))
+                        || count > ((3 * (maxBins / 4)) + blankBinsSize)) {
+                    doubleDistances[count] = sum / bin.size();
+                } else {
+                    doubleDistances[count] = 0;
+                }
                 count++;
                 bin.clear();
             }
