@@ -35,7 +35,7 @@ public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
     private static final Float[][] colours = new Float[][]{RGBColour.RED, RGBColour.ORANGE, RGBColour.YELLOW, RGBColour.GREEN, RGBColour.CYAN, RGBColour.BLUE, RGBColour.MAGENTA};
     private static final String[] bodyParts = new String[]{"Nose", "Right Eye", "Left Eye", "Right Ear", "Left Ear", "Right Shoulder", "Left Shoulder", "Right Elbow", "Left Elbow", "Right Hand", "Left Hand", "Right Hip", "Left Hip", "Right Knee", "Left Knee", "Right Foot", "Left Foot"};
-    private static final float SPEED_FACTOR = 0.25f; // 1f - Normal running, 0.25f - Fast running
+    private static final float SPEED_FACTOR = 1f; // 1f - Normal running, 0.25f - Fast running
     private static Predictor<Image, Joints> predictor;
 
     public static void main(String[] args) throws IOException, TranslateException {
@@ -210,8 +210,8 @@ public class Main {
 
         // Nearest neighbour to find the closest training image to each testing image
         float correctCount = 0f;
-        double incorrectAccuracySum = 0f, incorrectAccuracyMd = 0f, incorrectDistanceSum = 0f;
-        ArrayList<Double> incorrectAccuracys = new ArrayList<>();
+        double incorrectAccuracySum = 0f, incorrectAccuracyMd = 0f, incorrectDistanceSum = 0f, incorrectDistanceMd = 0f;
+        ArrayList<Double> incorrectAccuracys = new ArrayList<>(), incorrectDistances = new ArrayList<>();
 
         for (ComputedImage testingImage : testingImages) {
             ComputedImage nearestImage = null;
@@ -238,6 +238,7 @@ public class Main {
                 correctCount += 1f;
             } else {
                 double incorrectDistance = correctDistance - nearestDistance;
+                incorrectDistances.add(incorrectDistance);
                 incorrectDistanceSum += incorrectDistance;
 
                 double incorrectAccuracy = (incorrectDistance / (furthestDistance - correctDistance)) * 100f;
@@ -246,6 +247,7 @@ public class Main {
             }
         }
 
+        // Data collection
         double incorrectAccuracyMean = incorrectAccuracySum / (22f - correctCount);
         for (double incorrectAccuracy : incorrectAccuracys) {
             incorrectAccuracyMd += Math.pow(incorrectAccuracy - incorrectAccuracyMean, 2);
@@ -253,12 +255,15 @@ public class Main {
         double incorrectAccuracySd = Math.sqrt(incorrectAccuracyMd / (22f - correctCount));
 
         double incorrectDistanceMean = incorrectDistanceSum / (22f - correctCount);
-        double incorrectDistanceSd = 0f;
+        for (double incorrectDistance : incorrectDistances) {
+            incorrectDistanceMd += Math.pow(incorrectDistance - incorrectDistanceMean, 2);
+        }
+        double incorrectDistanceSd = Math.sqrt(incorrectDistanceMd / (22f - correctCount));
 
         return new double[]{correctCount, incorrectAccuracyMean, incorrectAccuracySd, incorrectDistanceMean, incorrectDistanceSd};
     }
 
-    // CCR test - not used in classification
+    // Classification check
     static boolean classificationTest(int testingId, int trainingId) {
         return switch (testingId) {
             case 1 -> trainingId == 48; // n
