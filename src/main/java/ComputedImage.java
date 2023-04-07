@@ -100,7 +100,7 @@ public class ComputedImage {
         // Invariant features to centroid
         double[] array1 = new double[15];
         double[] array2 = new double[4];
-        double[] array3 = new double[2];
+        double[] array3 = new double[5];
         double[] array4 = new double[6];
         for (int i = 0; i < 9; i++) {
             array1[i] = jointRadii.get(i);
@@ -118,7 +118,10 @@ public class ComputedImage {
 
         // Body widths
         array3[0] = Math.sqrt(Math.pow(jointPixels.get(6).getX() - jointPixels.get(5).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(5).getY(), 2)); // shoulder to shoulder
-        array3[1] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 5).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 5).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2)); // hip to hip
+        array3[1] = Math.sqrt(Math.pow(jointPixels.get(8).getX() - jointPixels.get(7).getX(), 2) + Math.pow(jointPixels.get(8).getY() - jointPixels.get(7).getY(), 2)); // elbow to elbow
+        array3[2] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 5).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 5).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2)); // hip to hip
+        array3[3] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 3).getX() - jointPixels.get(jointPixels.size() - 4).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 3).getY() - jointPixels.get(jointPixels.size() - 4).getY(), 2)); // knee to knee
+        array3[4] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 1).getX() - jointPixels.get(jointPixels.size() - 2).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 1).getY() - jointPixels.get(jointPixels.size() - 2).getY(), 2)); // ankle to ankle
 
         // Body heights
         array4[0] = Math.sqrt(Math.pow(jointPixels.get(6).getX() - jointPixels.get(8).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(8).getY(), 2)); // left elbow to left shoulder
@@ -132,7 +135,7 @@ public class ComputedImage {
         if (isFront) {
             return featureVector.concatenate(new DoubleFV(array2)).concatenate(new DoubleFV(array3)).concatenate(new DoubleFV(array4)).normaliseFV();
         } else {
-            return featureVector.normaliseFV();
+            return featureVector.concatenate(new DoubleFV(array4)).normaliseFV();
         }
     }
 

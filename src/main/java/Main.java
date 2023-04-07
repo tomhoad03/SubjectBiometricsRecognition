@@ -26,6 +26,7 @@ import org.openimaj.util.pair.IntFloatPair;
 
 import javax.imageio.ImageIO;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.*;
@@ -91,7 +92,7 @@ public class Main {
         double[] sideClassificationResults = classifyImages(trainingImagesSide, testingImagesSide);
 
         // Print the results
-        System.out.println("Front Classification Accuracy = " + (float) ((frontClassificationResults[0] / 11f) * 100f) + "%"
+        String results = "Front Classification Accuracy = " + (float) ((frontClassificationResults[0] / 11f) * 100f) + "%"
                 + "\n" + "Side Classification Accuracy = " + (float) ((sideClassificationResults[0] / 11f) * 100f) + "%"
                 + "\n" + "Front Incorrect Accuracy Mean: " + (float) frontClassificationResults[1] + "%"
                 + "\n" + "Front Incorrect Accuracy SD: " + (float) frontClassificationResults[2] + "%"
@@ -101,7 +102,14 @@ public class Main {
                 + "\n" + "Side Incorrect Accuracy SD: " + (float) sideClassificationResults[2] + "%"
                 + "\n" + "Side Incorrect Mean: " + (float) sideClassificationResults[3]
                 + "\n" + "Side Incorrect SD: " + (float) sideClassificationResults[4]
-                + "\n" + "Correct Classification Rate (CCR) = " + (float) (((frontClassificationResults[0] + sideClassificationResults[0]) / 22f) * 100f) + "%");
+                + "\n" + "Correct Classification Rate (CCR) = " + (float) (((frontClassificationResults[0] + sideClassificationResults[0]) / 22f) * 100f) + "%";
+
+        File resultsFile = new File(PATH + "\\results.txt");
+        FileWriter fileWriter = new FileWriter(resultsFile);
+        fileWriter.write(results);
+        fileWriter.close();
+
+        System.out.println(results);
     }
 
     static ComputedImage readImage(MBFImage image, int count, boolean isTraining, boolean isFront) throws IOException, TranslateException {
