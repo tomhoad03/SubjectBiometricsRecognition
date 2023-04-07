@@ -102,7 +102,7 @@ public class ComputedImage {
         // Invariant features to centroid
         double[] array1 = new double[15];
         double[] array2 = new double[4];
-        double[] array3 = new double[4];
+        double[] array3 = new double[8];
         for (int i = 0; i < 9; i++) {
             array1[i] = jointRadii.get(i);
         }
@@ -112,16 +112,20 @@ public class ComputedImage {
         }
 
         // Inter-face distances
-        array2[0] = Math.sqrt(Math.pow(jointPixels.get(4).getX() - jointPixels.get(2).getX(), 2) + Math.pow(jointPixels.get(4).getY() - jointPixels.get(2).getY(), 2));
-        array2[1] = Math.sqrt(Math.pow(jointPixels.get(2).getX() - jointPixels.get(0).getX(), 2) + Math.pow(jointPixels.get(2).getY() - jointPixels.get(0).getY(), 2));
-        array2[2] = Math.sqrt(Math.pow(jointPixels.get(0).getX() - jointPixels.get(1).getX(), 2) + Math.pow(jointPixels.get(0).getY() - jointPixels.get(1).getY(), 2));
-        array2[3] = Math.sqrt(Math.pow(jointPixels.get(1).getX() - jointPixels.get(3).getX(), 2) + Math.pow(jointPixels.get(1).getY() - jointPixels.get(3).getY(), 2));
+        array2[0] = Math.sqrt(Math.pow(jointPixels.get(4).getX() - jointPixels.get(2).getX(), 2) + Math.pow(jointPixels.get(4).getY() - jointPixels.get(2).getY(), 2)); // left ear to left eye
+        array2[1] = Math.sqrt(Math.pow(jointPixels.get(2).getX() - jointPixels.get(0).getX(), 2) + Math.pow(jointPixels.get(2).getY() - jointPixels.get(0).getY(), 2)); // left eye to nose
+        array2[2] = Math.sqrt(Math.pow(jointPixels.get(0).getX() - jointPixels.get(1).getX(), 2) + Math.pow(jointPixels.get(0).getY() - jointPixels.get(1).getY(), 2)); // nose to right eye
+        array2[3] = Math.sqrt(Math.pow(jointPixels.get(1).getX() - jointPixels.get(3).getX(), 2) + Math.pow(jointPixels.get(1).getY() - jointPixels.get(3).getY(), 2)); // right eye to right ear
 
         // Body width
-        array3[0] = Math.sqrt(Math.pow(jointPixels.get(6).getX() - jointPixels.get(5).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(5).getY(), 2));
-        array3[1] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 5).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 5).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2));
-        array3[2] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 3).getX() - jointPixels.get(jointPixels.size() - 4).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 3).getY() - jointPixels.get(jointPixels.size() - 4).getY(), 2));
-        array3[3] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 1).getX() - jointPixels.get(jointPixels.size() - 2).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 1).getY() - jointPixels.get(jointPixels.size() - 2).getY(), 2));
+        array3[0] = Math.sqrt(Math.pow(jointPixels.get(6).getX() - jointPixels.get(5).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(5).getY(), 2)); // shoulder to shoulder
+        array3[1] = Math.sqrt(Math.pow(jointPixels.get(6).getX() - jointPixels.get(8).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(8).getY(), 2)); // left elbow to left shoulder
+        array3[2] = Math.sqrt(Math.pow(jointPixels.get(7).getX() - jointPixels.get(5).getX(), 2) + Math.pow(jointPixels.get(7).getY() - jointPixels.get(5).getY(), 2)); // right elbow to right shoulder
+        array3[3] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 5).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 5).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2)); // hip to hip
+        array3[4] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 4).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 4).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2)); // left hip to left knee
+        array3[5] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 3).getX() - jointPixels.get(jointPixels.size() - 5).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 3).getY() - jointPixels.get(jointPixels.size() - 5).getY(), 2)); // right hip to right knee
+        array3[6] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 2).getX() - jointPixels.get(jointPixels.size() - 4).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 2).getY() - jointPixels.get(jointPixels.size() - 4).getY(), 2)); // left knee to left ankle
+        array3[7] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 1).getX() - jointPixels.get(jointPixels.size() - 3).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 1).getY() - jointPixels.get(jointPixels.size() - 3).getY(), 2)); // right knee to right ankle
 
         DoubleFV featureVector = new DoubleFV(array1);
         if (isFront) {
