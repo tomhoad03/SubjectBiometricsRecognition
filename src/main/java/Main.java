@@ -35,7 +35,7 @@ public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
     private static final Float[][] colours = new Float[][]{RGBColour.RED, RGBColour.ORANGE, RGBColour.YELLOW, RGBColour.GREEN, RGBColour.CYAN, RGBColour.BLUE, RGBColour.MAGENTA};
     private static final String[] bodyParts = new String[]{"Nose", "Right Eye", "Left Eye", "Right Ear", "Left Ear", "Right Shoulder", "Left Shoulder", "Right Elbow", "Left Elbow", "Right Hand", "Left Hand", "Right Hip", "Left Hip", "Right Knee", "Left Knee", "Right Foot", "Left Foot"};
-    private static final float SPEED_FACTOR = 1f; // 1f - Normal running, 0.25f - Fast running
+    private static final float SPEED_FACTOR = 0.25f; // 1f - Normal running, 0.25f - Fast running
     private static Predictor<Image, Joints> predictor;
 
     public static void main(String[] args) throws IOException, TranslateException {
@@ -93,8 +93,14 @@ public class Main {
         // Print the results
         System.out.println("Front Classification Accuracy = " + (float) ((frontClassificationResults[0] / 11f) * 100f) + "%"
                 + "\n" + "Side Classification Accuracy = " + (float) ((sideClassificationResults[0] / 11f) * 100f) + "%"
-                + "\n" + "Front Incorrect Accuracy: " + (float) ((frontClassificationResults[1] / (22f - frontClassificationResults[0])) * 100f) + "%"
-                + "\n" + "Side Incorrect Accuracy: " + (float) ((sideClassificationResults[1] / (22f - sideClassificationResults[0])) * 100f) + "%"
+                + "\n" + "Front Incorrect Accuracy Mean: " + (float) frontClassificationResults[1] + "%"
+                + "\n" + "Front Incorrect Accuracy SD: " + (float) frontClassificationResults[2] + "%"
+                + "\n" + "Front Incorrect Mean: " + (float) frontClassificationResults[3]
+                + "\n" + "Front Incorrect SD: " + (float) frontClassificationResults[4]
+                + "\n" + "Side Incorrect Accuracy Mean: " + (float) sideClassificationResults[1] + "%"
+                + "\n" + "Side Incorrect Accuracy SD: " + (float) sideClassificationResults[2] + "%"
+                + "\n" + "Side Incorrect Mean: " + (float) sideClassificationResults[3]
+                + "\n" + "Side Incorrect SD: " + (float) sideClassificationResults[4]
                 + "\n" + "Correct Classification Rate (CCR) = " + (float) (((frontClassificationResults[0] + sideClassificationResults[0]) / 22f) * 100f) + "%");
     }
 
@@ -186,7 +192,7 @@ public class Main {
 
         return new ComputedImage(count,
                 clonedImage, // The image (to be removed later)
-                isFront,
+                isFront, // Is front or side image?
                 component.calculateCentroidPixel(), // The persons centroid
                 component.getOuterBoundary(), // Boundary pixels
                 joints); // Joint positions
@@ -203,8 +209,9 @@ public class Main {
         }
 
         // Nearest neighbour to find the closest training image to each testing image
-        float correctClassificationCount = 0f;
-        double incorrectAccuracySum = 0f;
+        float correctCount = 0f;
+        double incorrectAccuracySum = 0f, incorrectAccuracyMd = 0f, incorrectDistanceSum = 0f;
+        ArrayList<Double> incorrectAccuracys = new ArrayList<>();
 
         for (ComputedImage testingImage : testingImages) {
             ComputedImage nearestImage = null;
@@ -228,12 +235,27 @@ public class Main {
 
             // Checks classification accuracy
             if (nearestImage != null && classificationTest(testingImage.getId(), nearestImage.getId())) {
-                correctClassificationCount += 1f;
+                correctCount += 1f;
             } else {
-                incorrectAccuracySum += ((correctDistance - nearestDistance) / (furthestDistance - correctDistance));
+                double incorrectDistance = correctDistance - nearestDistance;
+                incorrectDistanceSum += incorrectDistance;
+
+                double incorrectAccuracy = (incorrectDistance / (furthestDistance - correctDistance)) * 100f;
+                incorrectAccuracys.add(incorrectAccuracy);
+                incorrectAccuracySum += incorrectAccuracy;
             }
         }
-        return new double[]{correctClassificationCount, incorrectAccuracySum};
+
+        double incorrectAccuracyMean = incorrectAccuracySum / (22f - correctCount);
+        for (double incorrectAccuracy : incorrectAccuracys) {
+            incorrectAccuracyMd += Math.pow(incorrectAccuracy - incorrectAccuracyMean, 2);
+        }
+        double incorrectAccuracySd = Math.sqrt(incorrectAccuracyMd / (22f - correctCount));
+
+        double incorrectDistanceMean = incorrectDistanceSum / (22f - correctCount);
+        double incorrectDistanceSd = 0f;
+
+        return new double[]{correctCount, incorrectAccuracyMean, incorrectAccuracySd, incorrectDistanceMean, incorrectDistanceSd};
     }
 
     // CCR test - not used in classification

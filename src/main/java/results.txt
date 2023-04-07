@@ -1,5 +1,7 @@
-Front Classification Accuracy = 9.090909%
+Front Classification Accuracy = 18.181818%
 Side Classification Accuracy = 54.545456%
-Front Incorrect Accuracy: 7.4385552%
-Side Incorrect Accuracy: 8.184769%
-Correct Classification Rate (CCR) = 31.818182%
+Front Incorrect Accuracy Mean: 9.354824%
+Front Incorrect Accuracy SD: 0.12379569
+Side Incorrect Accuracy Mean: 3.3883033%
+Side Incorrect Accuracy SD: 0.07001913
+Correct Classification Rate (CCR) = 36.363636%
