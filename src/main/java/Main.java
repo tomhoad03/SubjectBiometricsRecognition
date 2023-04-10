@@ -92,17 +92,13 @@ public class Main {
         double[] sideClassificationResults = classifyImages(trainingImagesSide, testingImagesSide);
 
         // Print the results
-        String results = "Front Classification Accuracy = " + (float) ((frontClassificationResults[0] / 11f) * 100f) + "%"
+        String results = "Correct Classification Rate (CCR) = " + (float) (((frontClassificationResults[0] + sideClassificationResults[0]) / 22f) * 100f) + "%"
+                + "\n" + "Front Classification Accuracy = " + (float) ((frontClassificationResults[0] / 11f) * 100f) + "%"
                 + "\n" + "Side Classification Accuracy = " + (float) ((sideClassificationResults[0] / 11f) * 100f) + "%"
-                + "\n" + "Front Incorrect Accuracy Mean: " + (float) frontClassificationResults[1] + "%"
-                + "\n" + "Front Incorrect Accuracy SD: " + (float) frontClassificationResults[2] + "%"
-                + "\n" + "Front Incorrect Mean: " + (float) frontClassificationResults[3]
-                + "\n" + "Front Incorrect SD: " + (float) frontClassificationResults[4]
-                + "\n" + "Side Incorrect Accuracy Mean: " + (float) sideClassificationResults[1] + "%"
-                + "\n" + "Side Incorrect Accuracy SD: " + (float) sideClassificationResults[2] + "%"
-                + "\n" + "Side Incorrect Mean: " + (float) sideClassificationResults[3]
-                + "\n" + "Side Incorrect SD: " + (float) sideClassificationResults[4]
-                + "\n" + "Correct Classification Rate (CCR) = " + (float) (((frontClassificationResults[0] + sideClassificationResults[0]) / 22f) * 100f) + "%";
+                + "\n" + "Front Incorrect Accuracy Mean (SD): " + (float) frontClassificationResults[1] + "% (" + (float) frontClassificationResults[2] + "%)"
+                + "\n" + "Front Incorrect Mean (SD): " + (float) frontClassificationResults[3] + " (" + (float) frontClassificationResults[4] + ")"
+                + "\n" + "Side Incorrect Accuracy Mean (SD): " + (float) sideClassificationResults[1] + "% (" + (float) sideClassificationResults[2] + "%)"
+                + "\n" + "Side Incorrect Mean (SD): " + (float) sideClassificationResults[3] + " (" + (float) sideClassificationResults[4] + ")";
 
         File resultsFile = new File(PATH + "\\results.txt");
         FileWriter fileWriter = new FileWriter(resultsFile);
@@ -201,8 +197,7 @@ public class Main {
         return new ComputedImage(count,
                 clonedImage, // The image (to be removed later)
                 isFront, // Is front or side image?
-                component.calculateCentroidPixel(), // The persons centroid
-                component.getOuterBoundary(), // Boundary pixels
+                component, // The connected component
                 joints); // Joint positions
     }
 
@@ -256,17 +251,17 @@ public class Main {
         }
 
         // Data collection
-        double incorrectAccuracyMean = incorrectAccuracySum / (22f - correctCount);
+        double incorrectAccuracyMean = incorrectAccuracySum / (11f - correctCount);
         for (double incorrectAccuracy : incorrectAccuracys) {
             incorrectAccuracyMd += Math.pow(incorrectAccuracy - incorrectAccuracyMean, 2);
         }
-        double incorrectAccuracySd = Math.sqrt(incorrectAccuracyMd / (22f - correctCount));
+        double incorrectAccuracySd = Math.sqrt(incorrectAccuracyMd / (11f - correctCount));
 
-        double incorrectDistanceMean = incorrectDistanceSum / (22f - correctCount);
+        double incorrectDistanceMean = incorrectDistanceSum / (11f - correctCount);
         for (double incorrectDistance : incorrectDistances) {
             incorrectDistanceMd += Math.pow(incorrectDistance - incorrectDistanceMean, 2);
         }
-        double incorrectDistanceSd = Math.sqrt(incorrectDistanceMd / (22f - correctCount));
+        double incorrectDistanceSd = Math.sqrt(incorrectDistanceMd / (11f - correctCount));
 
         return new double[]{correctCount, incorrectAccuracyMean, incorrectAccuracySd, incorrectDistanceMean, incorrectDistanceSd};
     }
