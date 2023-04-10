@@ -7,6 +7,7 @@ import ai.djl.repository.zoo.Criteria;
 import ai.djl.translate.TranslateException;
 import org.openimaj.data.dataset.VFSListDataset;
 import org.openimaj.feature.DoubleFVComparison;
+import org.openimaj.feature.FeatureVector;
 import org.openimaj.image.ImageUtilities;
 import org.openimaj.image.MBFImage;
 import org.openimaj.image.colour.ColourSpace;
@@ -22,6 +23,7 @@ import org.openimaj.image.typography.hershey.HersheyFont;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
 import org.openimaj.ml.clustering.kmeans.FloatKMeans;
+import org.openimaj.ml.pca.FeatureVectorPCA;
 import org.openimaj.util.pair.IntFloatPair;
 
 import javax.imageio.ImageIO;
@@ -189,19 +191,26 @@ public class Main {
 
         clonedImage = clonedImage.extractROI(component.calculateRegularBoundingBox());
         ImageUtilities.write(clonedImage, jointsImageFile);
-
-        return new ComputedImage(count, clonedImage, component, joints);
+        return new ComputedImage(count, component, joints);
     }
 
     // Classifies the dataset
     static double[] classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
         // Trains the assigner
+        ArrayList<FeatureVector> featureVectors = new ArrayList<>();
+
         for (ComputedImage trainingImage : trainingImages) {
             trainingImage.extractFeature();
+            featureVectors.add(trainingImage.getExtractedFeature());
         }
         for (ComputedImage testingImage : testingImages) {
             testingImage.extractFeature();
+            featureVectors.add(testingImage.getExtractedFeature());
         }
+
+        // PCA
+        FeatureVectorPCA pca = new FeatureVectorPCA();
+        pca.learnBasis(featureVectors);
 
         // Nearest neighbour to find the closest training image to each testing image
         float correctCount = 0f;
@@ -265,18 +274,23 @@ public class Main {
         interDistances.sort(Comparator.comparingDouble(o -> o));
         intraDistances.sort(Comparator.comparingDouble(o -> o));
         double EER = 0f;
+        double smallestDistance = -1f;
         double finalThreshold = 0f;
 
         // EER
-        for (double threshold = 0f; threshold < 1f; threshold += 0.0000001f) {
+        for (double threshold = 0f; threshold < 1f; threshold += 0.000001f) {
             double tempThreshold = threshold;
             double FAR = interDistances.stream().filter(a -> a > tempThreshold).count() / (double) interDistances.size();
             double FFR = intraDistances.stream().filter(a -> a < tempThreshold).count() / (double) intraDistances.size();
 
-            if (FAR == FFR) {
+            if (FAR == FFR || smallestDistance == -1 || Math.abs(FAR - FFR) < smallestDistance) {
                 EER = FAR * 100f;
                 finalThreshold = tempThreshold;
-                break;
+                smallestDistance = Math.abs(FAR - FFR);
+
+                if (FAR == FFR) {
+                    break;
+                }
             }
         }
 
