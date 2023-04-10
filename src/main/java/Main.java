@@ -196,7 +196,7 @@ public class Main {
 
     // Classifies the dataset
     static double[] classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
-        // Trains the assigner
+        // Creates feature vectors from each image
         ArrayList<FeatureVector> featureVectors = new ArrayList<>();
 
         for (ComputedImage trainingImage : trainingImages) {
@@ -205,10 +205,9 @@ public class Main {
         }
         for (ComputedImage testingImage : testingImages) {
             testingImage.extractFeature();
-            featureVectors.add(testingImage.getExtractedFeature());
         }
 
-        // PCA
+        // Learning PCA basis
         FeatureVectorPCA pca = new FeatureVectorPCA();
         pca.learnBasis(featureVectors);
 
@@ -222,7 +221,7 @@ public class Main {
 
             // Finds the nearest image
             for (ComputedImage trainingImage : trainingImages) {
-                double distance = DoubleFVComparison.EUCLIDEAN.compare(trainingImage.getExtractedFeature(), testingImage.getExtractedFeature());
+                double distance = DoubleFVComparison.EUCLIDEAN.compare(pca.project(trainingImage.getExtractedFeature()), pca.project(testingImage.getExtractedFeature()));
 
                 if (nearestDistance == -1 || distance < nearestDistance) {
                     nearestDistance = distance;
