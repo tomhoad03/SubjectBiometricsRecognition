@@ -12,15 +12,13 @@ import java.util.List;
 public class ComputedImage {
     private final int id;
     private final MBFImage image;
-    private final Boolean isFront;
     private final ConnectedComponent component;
     private final Joints joints;
     private DoubleFV extractedFeature;
 
-    public ComputedImage(int id, MBFImage image, Boolean isFront, ConnectedComponent component, Joints joints) {
+    public ComputedImage(int id, MBFImage image, ConnectedComponent component, Joints joints) {
         this.id = id;
         this.image = image;
-        this.isFront = isFront;
         this.component = component;
         this.joints = joints;
     }
@@ -30,13 +28,13 @@ public class ComputedImage {
     }
 
     public void extractFeature() {
-        this.extractedFeature = extractSilhouetteFV().concatenate(extractJointsFV()).normaliseFV();
+        this.extractedFeature = extractSilhouetteFV().concatenate(extractJointsFV());
     }
 
     // Extract silhouette feature vector
     public DoubleFV extractSilhouetteFV() {
-        int maxBins = 128, blankBinsSize = maxBins / 16, count = 0;
-        double[] doubleDistances = new double[maxBins];
+        int maxBins = 90, halfBlankBinSize = 6, count = 0, backCount = 0;
+        double[] doubleDistances = new double[maxBins - (halfBlankBinSize * 4)];
         ArrayList<PolarPixel> pixels = new ArrayList<>();
         double centroidX = component.calculateCentroidPixel().getX(), centroidY = component.calculateCentroidPixel().getY();
 
@@ -71,13 +69,12 @@ public class ComputedImage {
                 for (double value : bin) {
                     sum += value;
                 }
-                if (!isFront
-                        ||count < ((maxBins / 4) - blankBinsSize)
-                        || (count > ((maxBins / 4) + blankBinsSize) && count < ((3 * (maxBins / 4)) - blankBinsSize))
-                        || count > ((3 * (maxBins / 4)) + blankBinsSize)) {
-                    doubleDistances[count] = sum / bin.size();
+                if (count < ((maxBins / 4) - halfBlankBinSize)
+                        || (count > ((maxBins / 4) + halfBlankBinSize) && count < ((3 * (maxBins / 4)) - halfBlankBinSize))
+                        || count > ((3 * (maxBins / 4)) + halfBlankBinSize)) {
+                    doubleDistances[count - backCount] = sum / bin.size();
                 } else {
-                    doubleDistances[count] = 0;
+                    backCount++;
                 }
                 count++;
                 bin.clear();
@@ -133,10 +130,10 @@ public class ComputedImage {
         // Body heights
         array4[0] = Math.sqrt(Math.pow(jointPixels.get(6).getX() - jointPixels.get(8).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(8).getY(), 2)); // left elbow to left shoulder
         array4[1] = Math.sqrt(Math.pow(jointPixels.get(5).getX() - jointPixels.get(7).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(7).getY(), 2)); // right elbow to right shoulder
-        array4[2] = 0f; // Math.sqrt(Math.pow(jointPixels.get(6).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2)); // left hip to left shoulder
-        array4[3] = 0f; // Math.sqrt(Math.pow(jointPixels.get(5).getX() - jointPixels.get(jointPixels.size() - 5).getX(), 2) + Math.pow(jointPixels.get(5).getY() - jointPixels.get(jointPixels.size() - 5).getY(), 2)); // right hip to right shoulder
-        array4[4] = 0f; // Math.sqrt(Math.pow(jointPixels.get(8).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(8).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2)); // left hip to left elbow
-        array4[5] = 0f; // Math.sqrt(Math.pow(jointPixels.get(7).getX() - jointPixels.get(jointPixels.size() - 5).getX(), 2) + Math.pow(jointPixels.get(7).getY() - jointPixels.get(jointPixels.size() - 5).getY(), 2)); // right hip to right elbow
+        array4[2] = Math.sqrt(Math.pow(jointPixels.get(6).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2)); // left hip to left shoulder
+        array4[3] = Math.sqrt(Math.pow(jointPixels.get(5).getX() - jointPixels.get(jointPixels.size() - 5).getX(), 2) + Math.pow(jointPixels.get(5).getY() - jointPixels.get(jointPixels.size() - 5).getY(), 2)); // right hip to right shoulder
+        array4[4] = Math.sqrt(Math.pow(jointPixels.get(8).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(8).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2)); // left hip to left elbow
+        array4[5] = Math.sqrt(Math.pow(jointPixels.get(7).getX() - jointPixels.get(jointPixels.size() - 5).getX(), 2) + Math.pow(jointPixels.get(7).getY() - jointPixels.get(jointPixels.size() - 5).getY(), 2)); // right hip to right elbow
         array4[6] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 4).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 4).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2)); // left hip to left knee
         array4[7] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 3).getX() - jointPixels.get(jointPixels.size() - 5).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 3).getY() - jointPixels.get(jointPixels.size() - 5).getY(), 2)); // right hip to right knee
         array4[8] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 2).getX() - jointPixels.get(jointPixels.size() - 4).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 2).getY() - jointPixels.get(jointPixels.size() - 4).getY(), 2)); // left knee to left ankle
@@ -146,20 +143,7 @@ public class ComputedImage {
         DoubleFV faceDistancesFV = new DoubleFV(array2);
         DoubleFV widthDistancesFV = new DoubleFV(array3);
         DoubleFV heightDistancesFV = new DoubleFV(array4);
-        if (isFront) {
-            return centroidDistancesFV.concatenate(faceDistancesFV).concatenate(widthDistancesFV).concatenate(heightDistancesFV).normaliseFV();
-        } else {
-            return centroidDistancesFV.normaliseFV(); // .concatenate(heightDistancesFV)
-        }
-    }
-
-    // Extract ratios FV
-    public DoubleFV extractRatioFV() {
-        double areaRatio = ((double) component.calculateArea()) / component.calculateRegularBoundingBox().calculateArea();
-        double aspectRatio = component.calculateRegularBoundingBoxAspectRatio();
-        double orientedAspectRatio = component.calculateOrientatedBoundingBoxAspectRatio();
-
-        return new DoubleFV(new double[]{areaRatio, aspectRatio, orientedAspectRatio}).normaliseFV();
+        return centroidDistancesFV.concatenate(faceDistancesFV).concatenate(widthDistancesFV).concatenate(heightDistancesFV).normaliseFV();
     }
 
     public DoubleFV getExtractedFeature() {

@@ -1,7 +1,6 @@
-Correct Classification Rate (CCR) = 36.363636%
-Front Classification Accuracy = 18.181818%
-Side Classification Accuracy = 54.545456%
-Front Incorrect Accuracy Mean (SD): 14.968085% ( 8.935153%)
-Front Incorrect Mean (SD): 0.002127365 (0.0011916275)
-Side Incorrect Accuracy Mean (SD): 26.19159% (23.15183%)
-Side Incorrect Mean (SD): 0.0038634094 (0.002874436)
+Correct Classification Rate (CCR) = 27.272728%
+Nearest Distance Mean: 0.0139361145
+Correct Distance Mean: 0.028588641
+Furthest Distance Mean: 0.044230875
+Equal Error Rate: 44.0%
+EER Threshold: 0.0140328

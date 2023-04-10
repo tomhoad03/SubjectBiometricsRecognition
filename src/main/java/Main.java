@@ -43,11 +43,8 @@ public class Main {
         AtomicReference<VFSListDataset<MBFImage>> training = new AtomicReference<>(new VFSListDataset<>(PATH + "biometrics\\training", ImageUtilities.MBFIMAGE_READER));
         AtomicReference<VFSListDataset<MBFImage>> testing = new AtomicReference<>(new VFSListDataset<>(PATH + "biometrics\\testing", ImageUtilities.MBFIMAGE_READER));
 
-        ArrayList<ComputedImage> trainingImagesFront = new ArrayList<>();
-        ArrayList<ComputedImage> trainingImagesSide = new ArrayList<>();
-
-        ArrayList<ComputedImage> testingImagesFront = new ArrayList<>();
-        ArrayList<ComputedImage> testingImagesSide = new ArrayList<>();
+        ArrayList<ComputedImage> trainingImages = new ArrayList<>();
+        ArrayList<ComputedImage> testingImages = new ArrayList<>();
 
         // Pose estimation using DJL
         try {
@@ -67,38 +64,27 @@ public class Main {
 
         // Read and print the training images
         int count = 1;
-
         for (MBFImage trainingImage : training.get()) {
-            if (count % 2 == 1) {
-                trainingImagesFront.add(readImage(trainingImage, count, true, true));
-            } else {
-                trainingImagesSide.add(readImage(trainingImage, count, true, false));
-            }
+            trainingImages.add(readImage(trainingImage, count, true));
             count++;
         }
 
         // Read and print the testing images
         count = 1;
         for (MBFImage testingImage : testing.get()) {
-            if (count % 2 == 0) {
-                testingImagesFront.add(readImage(testingImage, count, false, true));
-            } else {
-                testingImagesSide.add(readImage(testingImage, count, false, false));
-            }
+            testingImages.add(readImage(testingImage, count, false));
             count++;
         }
 
-        double[] frontClassificationResults = classifyImages(trainingImagesFront, testingImagesFront);
-        double[] sideClassificationResults = classifyImages(trainingImagesSide, testingImagesSide);
-
         // Print the results
-        String results = "Correct Classification Rate (CCR) = " + (float) (((frontClassificationResults[0] + sideClassificationResults[0]) / 22f) * 100f) + "%"
-                + "\n" + "Front Classification Accuracy = " + (float) ((frontClassificationResults[0] / 11f) * 100f) + "%"
-                + "\n" + "Side Classification Accuracy = " + (float) ((sideClassificationResults[0] / 11f) * 100f) + "%"
-                + "\n" + "Front Incorrect Accuracy Mean (SD): " + (float) frontClassificationResults[1] + "% (" + (float) frontClassificationResults[2] + "%)"
-                + "\n" + "Front Incorrect Mean (SD): " + (float) frontClassificationResults[3] + " (" + (float) frontClassificationResults[4] + ")"
-                + "\n" + "Side Incorrect Accuracy Mean (SD): " + (float) sideClassificationResults[1] + "% (" + (float) sideClassificationResults[2] + "%)"
-                + "\n" + "Side Incorrect Mean (SD): " + (float) sideClassificationResults[3] + " (" + (float) sideClassificationResults[4] + ")";
+        double[] classificationResults = classifyImages(trainingImages, testingImages);
+
+        String results = "Correct Classification Rate (CCR) = " + (float) classificationResults[0] + "%"
+                + "\n" + "Nearest Distance Mean: " + (float) classificationResults[1]
+                + "\n" + "Correct Distance Mean: " + (float) classificationResults[2]
+                + "\n" + "Furthest Distance Mean: " + (float) classificationResults[3]
+                + "\n" + "Equal Error Rate: " + (float) classificationResults[4] + "%"
+                + "\n" + "EER Threshold: " + (float) classificationResults[5];
 
         File resultsFile = new File(PATH + "\\results.txt");
         FileWriter fileWriter = new FileWriter(resultsFile);
@@ -108,7 +94,7 @@ public class Main {
         System.out.println(results);
     }
 
-    static ComputedImage readImage(MBFImage image, int count, boolean isTraining, boolean isFront) throws IOException, TranslateException {
+    static ComputedImage readImage(MBFImage image, int count, boolean isTraining) throws IOException, TranslateException {
         // Crop the image
         image = image.extractCenter((image.getWidth() / 2) + 100, (image.getHeight() / 2) + 115, 740, 1280);
         image.processInplace(new ResizeProcessor(SPEED_FACTOR));
@@ -194,11 +180,7 @@ public class Main {
         clonedImage = clonedImage.extractROI(component.calculateRegularBoundingBox());
         ImageUtilities.write(clonedImage, jointsImageFile);
 
-        return new ComputedImage(count,
-                clonedImage, // The image (to be removed later)
-                isFront, // Is front or side image?
-                component, // The connected component
-                joints); // Joint positions
+        return new ComputedImage(count, clonedImage, component, joints);
     }
 
     // Classifies the dataset
@@ -213,12 +195,11 @@ public class Main {
 
         // Nearest neighbour to find the closest training image to each testing image
         float correctCount = 0f;
-        double incorrectAccuracySum = 0f, incorrectAccuracyMd = 0f, incorrectDistanceSum = 0f, incorrectDistanceMd = 0f;
-        ArrayList<Double> incorrectAccuracys = new ArrayList<>(), incorrectDistances = new ArrayList<>();
+        double correctDistancesSum = 0f, nearestDistancesSum = 0f, furthestDistancesSum = 0f;
 
         for (ComputedImage testingImage : testingImages) {
             ComputedImage nearestImage = null;
-            double nearestDistance = -1, furthestDistance = -1, correctDistance = 0f;
+            double nearestDistance = -1, furthestDistance = -1;
 
             // Finds the nearest image
             for (ComputedImage trainingImage : trainingImages) {
@@ -232,7 +213,7 @@ public class Main {
                 }
 
                 if (classificationTest(testingImage.getId(), trainingImage.getId())) {
-                    correctDistance = distance;
+                    correctDistancesSum += distance;
                 }
             }
 
@@ -240,57 +221,89 @@ public class Main {
             if (nearestImage != null && classificationTest(testingImage.getId(), nearestImage.getId())) {
                 correctCount += 1f;
             } else {
-                double incorrectDistance = correctDistance - nearestDistance;
-                incorrectDistances.add(incorrectDistance);
-                incorrectDistanceSum += incorrectDistance;
-
-                double incorrectAccuracy = (incorrectDistance / (furthestDistance - correctDistance)) * 100f;
-                incorrectAccuracys.add(incorrectAccuracy);
-                incorrectAccuracySum += incorrectAccuracy;
+                nearestDistancesSum += nearestDistance;
+                furthestDistancesSum += furthestDistance;
             }
         }
 
         // Data collection
-        double incorrectAccuracyMean = incorrectAccuracySum / (11f - correctCount);
-        for (double incorrectAccuracy : incorrectAccuracys) {
-            incorrectAccuracyMd += Math.pow(incorrectAccuracy - incorrectAccuracyMean, 2);
-        }
-        double incorrectAccuracySd = Math.sqrt(incorrectAccuracyMd / (11f - correctCount));
+        double correctClassificationRate = (correctCount / 22f) * 100f;
+        double nearestDistanceMean = nearestDistancesSum / 22f;
+        double correctDistanceMean = correctDistancesSum / 44f;
+        double furthestDistanceMean = furthestDistancesSum / 22f;
 
-        double incorrectDistanceMean = incorrectDistanceSum / (11f - correctCount);
-        for (double incorrectDistance : incorrectDistances) {
-            incorrectDistanceMd += Math.pow(incorrectDistance - incorrectDistanceMean, 2);
-        }
-        double incorrectDistanceSd = Math.sqrt(incorrectDistanceMd / (11f - correctCount));
+        // Histogram of distances
+        ArrayList<Double> intraDistances = new ArrayList<>(), interDistances = new ArrayList<>();
 
-        return new double[]{correctCount, incorrectAccuracyMean, incorrectAccuracySd, incorrectDistanceMean, incorrectDistanceSd};
+        for (int i = 0; i < trainingImages.size(); i++) {
+            for (int j = i; j < trainingImages.size(); j++) {
+                ComputedImage trainingImageA = trainingImages.get(i);
+                ComputedImage trainingImageB = trainingImages.get(j);
+
+                if (trainingImageA.getId() != trainingImageB.getId()) {
+                    double distance = DoubleFVComparison.EUCLIDEAN.compare(trainingImageA.getExtractedFeature(), trainingImageB.getExtractedFeature());
+
+                    if (distancesTest(trainingImageA.getId(), trainingImageB.getId())) {
+                        interDistances.add(distance);
+                    } else {
+                        intraDistances.add(distance);
+                    }
+                }
+            }
+        }
+
+        interDistances.sort(Comparator.comparingDouble(o -> o));
+        intraDistances.sort(Comparator.comparingDouble(o -> o));
+        double EER = 0f;
+        double finalThreshold = 0f;
+
+        // EER
+        for (double threshold = 0f; threshold < 1; threshold += 0.00000001f) {
+            double lambdaThreshold = threshold;
+            double FAR = interDistances.stream().filter(aDouble -> aDouble > lambdaThreshold).count();
+            double FFR = intraDistances.stream().filter(aDouble -> aDouble < lambdaThreshold).count();
+
+            if (FAR == FFR) {
+                EER = FAR;
+                finalThreshold = lambdaThreshold;
+                break;
+            }
+        }
+
+        return new double[]{correctClassificationRate, nearestDistanceMean, correctDistanceMean, furthestDistanceMean, EER, finalThreshold};
     }
 
     // Classification check
     static boolean classificationTest(int testingId, int trainingId) {
         return switch (testingId) {
-            case 1 -> trainingId == 48; // n
-            case 2 -> trainingId == 47; // n
-            case 3 -> trainingId == 50; // n
-            case 4 -> trainingId == 49; // n
-            case 5 -> trainingId == 52; // y
-            case 6 -> trainingId == 51; // n
-            case 7 -> trainingId == 54; // n
-            case 8 -> trainingId == 53; // n
-            case 9 -> trainingId == 56; // y
-            case 10 -> trainingId == 55; // n
-            case 11 -> trainingId == 58; // y
-            case 12 -> trainingId == 57; // n
-            case 13 -> trainingId == 60; // y
-            case 14 -> trainingId == 59; // n
-            case 15 -> trainingId == 62; // y
-            case 16 -> trainingId == 61; // n
-            case 17 -> trainingId == 64; // n
-            case 18 -> trainingId == 63; // n
-            case 19 -> trainingId == 66; // y
-            case 20 -> trainingId == 65; // n
-            case 21 -> trainingId == 88; // n
-            case 22 -> trainingId == 87; // y
+            case 1, 2 -> trainingId == 47 || trainingId == 48;
+            case 3, 4 -> trainingId == 49 || trainingId == 50;
+            case 5, 6 -> trainingId == 51 || trainingId == 52;
+            case 7, 8 -> trainingId == 53 || trainingId == 54;
+            case 9, 10 -> trainingId == 55 || trainingId == 56;
+            case 11, 12 -> trainingId == 57 || trainingId == 58;
+            case 13, 14 -> trainingId == 59 || trainingId == 60;
+            case 15, 16 -> trainingId == 61 || trainingId == 62;
+            case 17, 18 -> trainingId == 63 || trainingId == 64;
+            case 19, 20 -> trainingId == 65 || trainingId == 66;
+            case 21, 22 -> trainingId == 87 || trainingId == 88;
+            default -> false;
+        };
+    }
+
+    static boolean distancesTest(int testingId, int trainingId) {
+        return switch (trainingId) {
+            case 47, 48 -> testingId == 1 || testingId == 2;
+            case 49, 50 -> testingId == 3 || testingId == 4;
+            case 51, 52 -> testingId == 5 || testingId == 6;
+            case 53, 54 -> testingId == 7 || testingId == 8;
+            case 55, 56 -> testingId == 9 || testingId == 10;
+            case 57, 58 -> testingId == 11 || testingId == 12;
+            case 59, 60 -> testingId == 13 || testingId == 14;
+            case 61, 62 -> testingId == 15 || testingId == 16;
+            case 63, 64 -> testingId == 17 || testingId == 18;
+            case 65, 66 -> testingId == 19 || testingId == 20;
+            case 87, 88 -> testingId == 21 || testingId == 22;
             default -> false;
         };
     }
