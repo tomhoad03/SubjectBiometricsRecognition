@@ -28,7 +28,7 @@ public class ComputedImage {
     }
 
     public void extractFeature() {
-        this.extractedFeature = extractSilhouetteFV().concatenate(extractJointsFV());
+        this.extractedFeature = extractSilhouetteFV().concatenate(extractJointsFV()); // .concatenate(extractRatiosFV())
     }
 
     // Extract silhouette feature vector
@@ -103,7 +103,7 @@ public class ComputedImage {
 
         // Invariant features to centroid
         double[] array1 = new double[15];
-        double[] array2 = new double[4];
+        double[] array2 = new double[5];
         double[] array3 = new double[5];
         double[] array4 = new double[10];
         for (int i = 0; i < 9; i++) {
@@ -119,6 +119,7 @@ public class ComputedImage {
         array2[1] = Math.sqrt(Math.pow(jointPixels.get(2).getX() - jointPixels.get(0).getX(), 2) + Math.pow(jointPixels.get(2).getY() - jointPixels.get(0).getY(), 2)); // left eye to nose
         array2[2] = Math.sqrt(Math.pow(jointPixels.get(0).getX() - jointPixels.get(1).getX(), 2) + Math.pow(jointPixels.get(0).getY() - jointPixels.get(1).getY(), 2)); // nose to right eye
         array2[3] = Math.sqrt(Math.pow(jointPixels.get(1).getX() - jointPixels.get(3).getX(), 2) + Math.pow(jointPixels.get(1).getY() - jointPixels.get(3).getY(), 2)); // right eye to right ear
+        array2[4] = Math.sqrt(Math.pow(jointPixels.get(4).getX() - jointPixels.get(3).getX(), 2) + Math.pow(jointPixels.get(4).getY() - jointPixels.get(3).getY(), 2)); // ear to ear
 
         // Body widths
         array3[0] = Math.sqrt(Math.pow(jointPixels.get(6).getX() - jointPixels.get(5).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(5).getY(), 2)); // shoulder to shoulder
@@ -144,6 +145,13 @@ public class ComputedImage {
         DoubleFV widthDistancesFV = new DoubleFV(array3);
         DoubleFV heightDistancesFV = new DoubleFV(array4);
         return centroidDistancesFV.concatenate(faceDistancesFV).concatenate(widthDistancesFV).concatenate(heightDistancesFV).normaliseFV();
+    }
+
+    // Extract ratios feature vector
+    public DoubleFV extractRatiosFV() {
+        DoubleFV ratioFV = new DoubleFV(new double[]{(double) component.calculateArea() / component.calculateRegularBoundingBox().calculateArea(), component.calculateRegularBoundingBoxAspectRatio()});
+        DoubleFV dimensionsFV = new DoubleFV(new double[]{component.calculateRegularBoundingBox().height, component.calculateRegularBoundingBox().width, component.calculateArea()});
+        return ratioFV.concatenate(dimensionsFV).normaliseFV();
     }
 
     public DoubleFV getExtractedFeature() {

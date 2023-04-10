@@ -36,7 +36,7 @@ public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
     private static final Float[][] colours = new Float[][]{RGBColour.RED, RGBColour.ORANGE, RGBColour.YELLOW, RGBColour.GREEN, RGBColour.CYAN, RGBColour.BLUE, RGBColour.MAGENTA};
     private static final String[] bodyParts = new String[]{"Nose", "Right Eye", "Left Eye", "Right Ear", "Left Ear", "Right Shoulder", "Left Shoulder", "Right Elbow", "Left Elbow", "Right Hand", "Left Hand", "Right Hip", "Left Hip", "Right Knee", "Left Knee", "Right Foot", "Left Foot"};
-    private static final float SPEED_FACTOR = 1f; // 1f - Normal running, 0.25f - Fast running
+    private static final float SPEED_FACTOR = 0.25f; // 1f - Normal running, 0.25f - Fast running
     private static Predictor<Image, Joints> predictor;
 
     public static void main(String[] args) throws IOException, TranslateException {
@@ -45,6 +45,8 @@ public class Main {
 
         ArrayList<ComputedImage> trainingImages = new ArrayList<>();
         ArrayList<ComputedImage> testingImages = new ArrayList<>();
+
+        long startTime = System.currentTimeMillis();
 
         // Pose estimation using DJL
         try {
@@ -63,6 +65,7 @@ public class Main {
         }
 
         // Read and print the training images
+
         int count = 1;
         for (MBFImage trainingImage : training.get()) {
             trainingImages.add(readImage(trainingImage, count, true));
@@ -78,13 +81,15 @@ public class Main {
 
         // Print the results
         double[] classificationResults = classifyImages(trainingImages, testingImages);
+        long endTime = System.currentTimeMillis();
 
         String results = "Correct Classification Rate (CCR) = " + (float) classificationResults[0] + "%"
                 + "\n" + "Nearest Distance Mean: " + (float) classificationResults[1]
                 + "\n" + "Correct Distance Mean: " + (float) classificationResults[2]
                 + "\n" + "Furthest Distance Mean: " + (float) classificationResults[3]
                 + "\n" + "Equal Error Rate: " + (float) classificationResults[4] + "%"
-                + "\n" + "EER Threshold: " + (float) classificationResults[5];
+                + "\n" + "EER Threshold: " + (float) classificationResults[5]
+                + "\n" + "Duration: " + (endTime - startTime) + "ms";
 
         File resultsFile = new File(PATH + "\\results.txt");
         FileWriter fileWriter = new FileWriter(resultsFile);
@@ -153,12 +158,13 @@ public class Main {
             }
         }
 
-        // Find the joints of training images
+        // Print the original image
         String resultPath = isTraining ? "training" : "testing";
         File imageFile = new File(PATH + "computed\\" + resultPath + "\\" + count + ".jpg");
-        File jointsImageFile = new File(PATH + "joints\\" + resultPath + "\\" + count + ".jpg");
         ImageUtilities.write(clonedImage, imageFile);
 
+        // Find the joints of training images
+        File jointsImageFile = new File(PATH + "joints\\" + resultPath + "\\" + count + ".jpg");
         Image jointsImage = BufferedImageFactory.getInstance().fromImage(ImageIO.read(imageFile));
         Joints joints = predictor.predict(jointsImage);
 
@@ -177,6 +183,10 @@ public class Main {
             }
             bodyPartCount++;
         }
+        clonedImage.drawPoint(component.calculateCentroidPixel(), RGBColour.RED, 5);
+        clonedImage.drawText("Centroid", component.calculateCentroidPixel(), HersheyFont.TIMES_MEDIUM, 20, RGBColour.RED);
+        clonedImage.drawPolygon(component.toPolygon(), RGBColour.RED);
+
         clonedImage = clonedImage.extractROI(component.calculateRegularBoundingBox());
         ImageUtilities.write(clonedImage, jointsImageFile);
 
@@ -258,14 +268,14 @@ public class Main {
         double finalThreshold = 0f;
 
         // EER
-        for (double threshold = 0f; threshold < 1; threshold += 0.00000001f) {
-            double lambdaThreshold = threshold;
-            double FAR = interDistances.stream().filter(aDouble -> aDouble > lambdaThreshold).count();
-            double FFR = intraDistances.stream().filter(aDouble -> aDouble < lambdaThreshold).count();
+        for (double threshold = 0f; threshold < 1f; threshold += 0.0000001f) {
+            double tempThreshold = threshold;
+            double FAR = interDistances.stream().filter(a -> a > tempThreshold).count() / (double) interDistances.size();
+            double FFR = intraDistances.stream().filter(a -> a < tempThreshold).count() / (double) intraDistances.size();
 
             if (FAR == FFR) {
-                EER = FAR;
-                finalThreshold = lambdaThreshold;
+                EER = FAR * 100f;
+                finalThreshold = tempThreshold;
                 break;
             }
         }
