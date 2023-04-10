@@ -38,7 +38,7 @@ public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
     private static final Float[][] colours = new Float[][]{RGBColour.RED, RGBColour.ORANGE, RGBColour.YELLOW, RGBColour.GREEN, RGBColour.CYAN, RGBColour.BLUE, RGBColour.MAGENTA};
     private static final String[] bodyParts = new String[]{"Nose", "Right Eye", "Left Eye", "Right Ear", "Left Ear", "Right Shoulder", "Left Shoulder", "Right Elbow", "Left Elbow", "Right Hand", "Left Hand", "Right Hip", "Left Hip", "Right Knee", "Left Knee", "Right Foot", "Left Foot"};
-    private static final float SPEED_FACTOR = 0.25f; // 1f - Normal running, 0.25f - Fast running
+    private static final float SPEED_FACTOR = 1f; // 1f - Normal running, 0.25f - Fast running
     private static Predictor<Image, Joints> predictor;
 
     public static void main(String[] args) throws IOException, TranslateException {
@@ -67,7 +67,6 @@ public class Main {
         }
 
         // Read and print the training images
-
         int count = 1;
         for (MBFImage trainingImage : training.get()) {
             trainingImages.add(readImage(trainingImage, count, true));
@@ -199,6 +198,8 @@ public class Main {
         // Creates feature vectors from each image
         ArrayList<FeatureVector> featureVectors = new ArrayList<>();
 
+        System.out.println("test 1");
+
         for (ComputedImage trainingImage : trainingImages) {
             trainingImage.extractFeature();
             featureVectors.add(trainingImage.getExtractedFeature());
@@ -207,9 +208,13 @@ public class Main {
             testingImage.extractFeature();
         }
 
+        System.out.println("test 2");
+
         // Learning PCA basis
         FeatureVectorPCA pca = new FeatureVectorPCA();
         pca.learnBasis(featureVectors);
+
+        System.out.println("test 3");
 
         // Nearest neighbour to find the closest training image to each testing image
         float correctCount = 0f;

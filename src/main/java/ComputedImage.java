@@ -13,7 +13,6 @@ public class ComputedImage {
     private final ConnectedComponent component;
     private final Joints joints;
     private DoubleFV extractedFeature;
-    private DoubleFV pcaVector;
 
     public ComputedImage(int id, ConnectedComponent component, Joints joints) {
         this.id = id;
@@ -34,9 +33,10 @@ public class ComputedImage {
         int maxBins = 60, halfBlankBinSize = 2, count = 0, backCount = 0;
         double[] doubleDistances = new double[maxBins - (halfBlankBinSize * 4)];
         ArrayList<PolarPixel> pixels = new ArrayList<>();
+        Pixel centroid = component.calculateCentroidPixel();
 
         for (Pixel pixel : component.getOuterBoundary()) {
-            pixels.add(new PolarPixel(pixel, component.calculateCentroidPixel()));
+            pixels.add(new PolarPixel(pixel, centroid));
         }
         pixels.sort(Comparator.comparingDouble(o -> o.angle));
 
@@ -70,9 +70,10 @@ public class ComputedImage {
         ArrayList<Double> jointRadii = new ArrayList<>();
         ArrayList<PolarPixel> jointPixels = new ArrayList<>();
         double width = component.calculateRegularBoundingBox().getWidth(), height = component.calculateRegularBoundingBox().getHeight();
+        Pixel centroid = component.calculateCentroidPixel();
 
         for (Joints.Joint joint : jointsList) {
-            PolarPixel polarPixel = new PolarPixel(new Pixel((int) (joint.getX() * width), (int) (joint.getY() * height)), component.calculateCentroidPixel());
+            PolarPixel polarPixel = new PolarPixel(new Pixel((int) (joint.getX() * width), (int) (joint.getY() * height)), centroid);
             jointRadii.add(polarPixel.getRadius());
             jointPixels.add(polarPixel);
         }
@@ -118,13 +119,5 @@ public class ComputedImage {
 
     public DoubleFV getExtractedFeature() {
         return extractedFeature;
-    }
-
-    public void setPcaVector(DoubleFV pcaVector) {
-        this.pcaVector = pcaVector;
-    }
-
-    public DoubleFV getPcaVector() {
-        return pcaVector;
     }
 }
