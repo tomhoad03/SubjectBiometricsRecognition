@@ -13,26 +13,23 @@ public class ComputedImage {
     private final ConnectedComponent component;
     private final Joints joints;
     private final double[] temperatureCounts;
-    private DoubleFV extractedFeature;
+    private final DoubleFV extractedFeature;
 
     public ComputedImage(int id, ConnectedComponent component, Joints joints, double[] temperatureCounts) {
         this.id = id;
         this.component = component;
         this.joints = joints;
         this.temperatureCounts = temperatureCounts;
+        this.extractedFeature = extractSilhouetteFV().concatenate(extractJointsFV()).concatenate(extractTemperaturesFV());
     }
 
     public int getId() {
         return id;
     }
 
-    public void extractFeature() {
-        this.extractedFeature = extractSilhouetteFV().concatenate(extractJointsFV()).concatenate(extractTemperaturesFV());
-    }
-
     // Extract silhouette feature vector
     public DoubleFV extractSilhouetteFV() {
-        int maxBins = 60, halfBlankBinSize = 2, count = 0, backCount = 0;
+        int maxBins = 56, halfBlankBinSize = 2, count = 0, backCount = 0;
         double[] doubleDistances = new double[maxBins - (halfBlankBinSize * 4)];
         ArrayList<PolarPixel> pixels = new ArrayList<>();
         Pixel centroid = component.calculateCentroidPixel();
@@ -68,14 +65,13 @@ public class ComputedImage {
     // Extract joints feature vector
     public DoubleFV extractJointsFV() {
         Rectangle boundingBox = component.calculateRegularBoundingBox();
-        double width = boundingBox.getWidth(), height = boundingBox.getHeight();
         Pixel centroid = component.calculateCentroidPixel();
         List<Joints.Joint> jointsList = joints.getJoints();
         ArrayList<Pixel> jointPixels = new ArrayList<>();
 
         // Creates a pose model
         for (Joints.Joint joint : jointsList) {
-            Pixel pixel = new Pixel((int) (joint.getX() * width), (int) (joint.getY() * height));
+            Pixel pixel = new Pixel((int) (joint.getX() * boundingBox.getWidth()), (int) (joint.getY() *  boundingBox.getHeight()));
             jointPixels.add(pixel);
         }
 
@@ -163,6 +159,10 @@ public class ComputedImage {
 
     // Extract temperatures feature vector
     public DoubleFV extractTemperaturesFV() {
+        double[] counts = new double[12];
+        for (int i = (temperatureCounts.length / 2) - 6; i < (temperatureCounts.length / 2) + 6; i++) {
+            counts[i - ((temperatureCounts.length / 2) - 6)] = temperatureCounts[i];
+        }
         return new DoubleFV(temperatureCounts).normaliseFV();
     }
 

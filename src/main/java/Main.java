@@ -44,6 +44,7 @@ public class Main {
 
         ArrayList<ComputedImage> trainingImages = new ArrayList<>();
         ArrayList<ComputedImage> testingImages = new ArrayList<>();
+        ArrayList<FeatureVector> featureVectors = new ArrayList<>();
 
         long startTime = System.currentTimeMillis();
 
@@ -82,18 +83,10 @@ public class Main {
             count++;
         }
 
-        // Creates feature vectors from each image
-        ArrayList<FeatureVector> featureVectors = new ArrayList<>();
-
+        // Learning PCA basis
         for (ComputedImage trainingImage : trainingImages) {
-            trainingImage.extractFeature();
             featureVectors.add(trainingImage.getExtractedFeature());
         }
-        for (ComputedImage testingImage : testingImages) {
-            testingImage.extractFeature();
-        }
-
-        // Learning PCA basis
         FeatureVectorPCA pca = new FeatureVectorPCA();
         pca.learnBasis(featureVectors);
 
@@ -111,13 +104,16 @@ public class Main {
                 if (nearestDistance == -1 || distance < nearestDistance) {
                     nearestDistance = distance;
                     nearestImage = trainingImage;
-                } else if (furthestDistance == -1 || distance > furthestDistance) {
+                }
+
+                if (furthestDistance == -1 || distance > furthestDistance) {
                     furthestDistance = distance;
                 }
             }
 
             // Checks classification accuracy
             if (nearestImage != null && classificationCheck(testingImage.getId(), nearestImage.getId())) {
+                System.out.print(testingImage.getId() + " ");
                 correctCount += 1f;
             }
         }
@@ -132,9 +128,9 @@ public class Main {
                 ComputedImage trainingImageB = trainingImages.get(j);
 
                 if (trainingImageA.getId() != trainingImageB.getId()) {
-                    double distance = DoubleFVComparison.EUCLIDEAN.compare(trainingImageA.getExtractedFeature(), trainingImageB.getExtractedFeature());
+                    double distance = DoubleFVComparison.EUCLIDEAN.compare(pca.project(trainingImageA.getExtractedFeature()), pca.project(trainingImageB.getExtractedFeature()));
 
-                    if (distancesCheck(trainingImageA.getId(), trainingImageB.getId())) {
+                    if (verificationCheck(trainingImageA.getId(), trainingImageB.getId())) {
                         interDistances.add(distance);
                     } else {
                         intraDistances.add(distance);
@@ -154,13 +150,13 @@ public class Main {
             double FAR = interDistances.stream().filter(a -> a > tempThreshold).count() / (double) interDistances.size();
             double FFR = intraDistances.stream().filter(a -> a < tempThreshold).count() / (double) intraDistances.size();
 
-            if (FAR == FFR || smallestDistance == -1 || Math.abs(FAR - FFR) < smallestDistance) {
+            if (FAR == FFR || smallestDistance == -1f || Math.abs(FAR - FFR) < smallestDistance) {
                 EER = FAR * 100f;
                 smallestDistance = Math.abs(FAR - FFR);
+            }
 
-                if (FAR == FFR) {
-                    break;
-                }
+            if (FAR == FFR) {
+                break;
             }
         }
         long endTime = System.currentTimeMillis();
@@ -175,7 +171,7 @@ public class Main {
         fileWriter.write(results);
         fileWriter.close();
 
-        System.out.println(results);
+        System.out.println("\n" + results);
     }
 
     static ComputedImage readImage(MBFImage image, int count, boolean isTraining) throws IOException, TranslateException {
@@ -238,19 +234,19 @@ public class Main {
         MBFImage temperatureImage = segmentedImage.clone();
         Rectangle boundingBox = component.calculateRegularBoundingBox();
         Pixel centroid = component.calculateCentroidPixel();
-        double componentHeight = boundingBox.getHeight();
         double[] temperatureCounts = new double[48];
 
         for (int y = 0; y < temperatureImage.getHeight(); y++) {
             for (int x = 0; x < temperatureImage.getWidth(); x++) {
                 if (pixels.contains(new Pixel(x, y))) {
-                    double divide = ((float) temperatureImage.getHeight() - (float) y) / componentHeight;
+                    double divide = ((float) temperatureImage.getHeight() - (float) y) / boundingBox.getHeight();
                     double doubleIndex = (divide * temperatures.length) / 2f;
                     int index = (int) Math.floor(doubleIndex);
 
                     if (x > centroid.getX()) {
                         index += temperatures.length / 2f;
                     }
+
                     try {
                         Float[] temperature = temperatures[index];
                         temperatureImage.getBand(0).pixels[y][x] = temperature[0];
@@ -274,18 +270,20 @@ public class Main {
 
         // Print the temperature image
         File temperatureImageFile = new File(PATH + "temperature\\" + resultPath + "\\" + count + ".jpg");
-        temperatureImage = temperatureImage.extractROI(boundingBox);
-        ImageUtilities.write(temperatureImage, temperatureImageFile);
+        ImageUtilities.write(temperatureImage.extractROI(boundingBox), temperatureImageFile);
 
-        // Find the joints of training images
+        // Print the joints image
         File jointsImageFile = new File(PATH + "joints\\" + resultPath + "\\" + count + ".jpg");
         Image jointsImage = BufferedImageFactory.getInstance().fromImage(ImageIO.read(imageFile));
         Joints joints = predictor.predict(jointsImage);
 
+        // Find the joints from the segmented image
         for (Joints.Joint joint : joints.getJoints()) {
             Pixel pixel = new Pixel((int) (joint.getX() * segmentedImage.getWidth()), (int) (joint.getY() * segmentedImage.getHeight()));
             segmentedImage.drawPoint(pixel, RGBColour.RED, 5);
         }
+
+        // Draw the centroid point
         segmentedImage.drawPoint(component.calculateCentroidPixel(), RGBColour.RED, 5);
         segmentedImage = segmentedImage.extractROI(boundingBox);
         ImageUtilities.write(segmentedImage, jointsImageFile);
@@ -293,53 +291,26 @@ public class Main {
         return new ComputedImage(count, component, joints, temperatureCounts);
     }
 
-    // Classification checks
-    static boolean exactClassificationCheck(int testingId, int trainingId) {
-        return switch (testingId) {
-            case 1 -> trainingId == 48;
-            case 2 -> trainingId == 47;
-            case 3 -> trainingId == 50;
-            case 4 -> trainingId == 49;
-            case 5 -> trainingId == 52;
-            case 6 -> trainingId == 51;
-            case 7 -> trainingId == 54;
-            case 8 -> trainingId == 53;
-            case 9 -> trainingId == 56;
-            case 10 -> trainingId == 55;
-            case 11 -> trainingId == 58;
-            case 12 -> trainingId == 57;
-            case 13 -> trainingId == 60;
-            case 14 -> trainingId == 59;
-            case 15 -> trainingId == 62;
-            case 16 -> trainingId == 61;
-            case 17 -> trainingId == 64;
-            case 18 -> trainingId == 63;
-            case 19 -> trainingId == 66;
-            case 20 -> trainingId == 65;
-            case 21 -> trainingId == 88;
-            case 22 -> trainingId == 87;
-            default -> false;
-        };
-    }
-
+    // Classification check
     static boolean classificationCheck(int testingId, int trainingId) {
         return switch (testingId) {
             case 1, 2 -> trainingId == 47 || trainingId == 48;
             case 3, 4 -> trainingId == 49 || trainingId == 50;
-            case 5, 6 -> trainingId == 51 || trainingId == 52;
+            case 5, 6 -> trainingId == 51 || trainingId == 52; // y
             case 7, 8 -> trainingId == 53 || trainingId == 54;
-            case 9, 10 -> trainingId == 55 || trainingId == 56;
-            case 11, 12 -> trainingId == 57 || trainingId == 58;
+            case 9, 10 -> trainingId == 55 || trainingId == 56; // y
+            case 11, 12 -> trainingId == 57 || trainingId == 58; // Y
             case 13, 14 -> trainingId == 59 || trainingId == 60;
-            case 15, 16 -> trainingId == 61 || trainingId == 62;
+            case 15, 16 -> trainingId == 61 || trainingId == 62; // Y
             case 17, 18 -> trainingId == 63 || trainingId == 64;
-            case 19, 20 -> trainingId == 65 || trainingId == 66;
-            case 21, 22 -> trainingId == 87 || trainingId == 88;
+            case 19, 20 -> trainingId == 65 || trainingId == 66; /// Y
+            case 21, 22 -> trainingId == 87 || trainingId == 88; // Y
             default -> false;
         };
     }
 
-    static boolean distancesCheck(int testingId, int trainingId) {
+    // Error rates check
+    static boolean verificationCheck(int testingId, int trainingId) {
         return switch (trainingId) {
             case 47, 48 -> testingId == 1 || testingId == 2;
             case 49, 50 -> testingId == 3 || testingId == 4;
