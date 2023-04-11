@@ -17,13 +17,10 @@ import org.openimaj.image.pixel.ConnectedComponent;
 import org.openimaj.image.pixel.Pixel;
 import org.openimaj.image.pixel.PixelSet;
 import org.openimaj.image.processing.resize.ResizeProcessor;
-import org.openimaj.image.processor.PixelProcessor;
+import org.openimaj.image.segmentation.KMSpatialColourSegmenter;
+import org.openimaj.image.segmentation.SegmentationUtilities;
 import org.openimaj.math.geometry.shape.Rectangle;
-import org.openimaj.ml.clustering.FloatCentroidsResult;
-import org.openimaj.ml.clustering.assignment.HardAssigner;
-import org.openimaj.ml.clustering.kmeans.FloatKMeans;
 import org.openimaj.ml.pca.FeatureVectorPCA;
-import org.openimaj.util.pair.IntFloatPair;
 
 import javax.imageio.ImageIO;
 import java.io.File;
@@ -179,33 +176,10 @@ public class Main {
         image = image.extractCenter((image.getWidth() / 2) + 100, (image.getHeight() / 2) + 115, 740, 1280);
         image.processInplace(new ResizeProcessor(0.5f));
         MBFImage segmentedImage = image.clone();
-        image = ColourSpace.convert(image, ColourSpace.CIE_Lab);
 
-        // Get the pixel data
-        float[][] imageData = image.getPixelVectorNative(new float[image.getWidth() * image.getHeight()][3]);
-
-        // Groups the pixels into their classes
-        FloatKMeans cluster = FloatKMeans.createExact(2);
-        FloatCentroidsResult result = cluster.cluster(imageData);
-        float[][] centroids = result.centroids;
-
-        // Assigns pixels to a class
-        image.processInplace((PixelProcessor<Float[]>) pixel -> {
-            HardAssigner<float[], float[], IntFloatPair> assigner = result.defaultHardAssigner();
-
-            float[] set1 = new float[3];
-            for (int i = 0; i < 3; i++) {
-                set1[i] = pixel[i];
-            }
-            float[] centroid = centroids[assigner.assign(set1)];
-
-            Float[] set2 = new Float[3];
-            for (int i = 0; i < 3; i++) {
-                set2[i] = centroid[i];
-            }
-            return set2;
-        });
-        image = ColourSpace.convert(image, ColourSpace.RGB);
+        // Image segmentation
+        KMSpatialColourSegmenter segmenter = new KMSpatialColourSegmenter(ColourSpace.CIE_Lab, 2);
+        SegmentationUtilities.renderSegments(image, segmenter.segment(image));
 
         // Get the two connected components
         GreyscaleConnectedComponentLabeler labeler = new GreyscaleConnectedComponentLabeler();
@@ -247,6 +221,7 @@ public class Main {
                         index += temperatures.length / 2f;
                     }
 
+                    // Sets the temperature of the pixel
                     try {
                         Float[] temperature = temperatures[index];
                         temperatureImage.getBand(0).pixels[y][x] = temperature[0];
