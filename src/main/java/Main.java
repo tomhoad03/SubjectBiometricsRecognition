@@ -272,14 +272,14 @@ public class Main {
             case 1, 2 -> trainingId == 47 || trainingId == 48;
             case 3, 4 -> trainingId == 49 || trainingId == 50;
             case 5, 6 -> trainingId == 51 || trainingId == 52; // y
-            case 7, 8 -> trainingId == 53 || trainingId == 54;
+            case 7, 8 -> trainingId == 53 || trainingId == 54; // y
             case 9, 10 -> trainingId == 55 || trainingId == 56; // y
             case 11, 12 -> trainingId == 57 || trainingId == 58; // Y
             case 13, 14 -> trainingId == 59 || trainingId == 60;
             case 15, 16 -> trainingId == 61 || trainingId == 62; // Y
-            case 17, 18 -> trainingId == 63 || trainingId == 64;
-            case 19, 20 -> trainingId == 65 || trainingId == 66; /// Y
-            case 21, 22 -> trainingId == 87 || trainingId == 88; // Y
+            case 17, 18 -> trainingId == 63 || trainingId == 64; // y
+            case 19, 20 -> trainingId == 65 || trainingId == 66; // Y
+            case 21, 22 -> trainingId == 87 || trainingId == 88; // y
             default -> false;
         };
     }
