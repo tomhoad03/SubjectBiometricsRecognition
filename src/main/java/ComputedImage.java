@@ -1,80 +1,92 @@
+import ai.djl.inference.Predictor;
+import ai.djl.modality.cv.BufferedImageFactory;
+import ai.djl.modality.cv.Image;
 import ai.djl.modality.cv.output.Joints;
+import ai.djl.translate.TranslateException;
 import org.openimaj.feature.DoubleFV;
+import org.openimaj.image.ImageUtilities;
+import org.openimaj.image.MBFImage;
+import org.openimaj.image.colour.ColourSpace;
+import org.openimaj.image.colour.RGBColour;
+import org.openimaj.image.connectedcomponent.GreyscaleConnectedComponentLabeler;
 import org.openimaj.image.pixel.ConnectedComponent;
 import org.openimaj.image.pixel.Pixel;
+import org.openimaj.image.pixel.PixelSet;
+import org.openimaj.image.segmentation.KMSpatialColourSegmenter;
+import org.openimaj.image.segmentation.SegmentationUtilities;
 import org.openimaj.math.geometry.shape.Rectangle;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import javax.imageio.ImageIO;
+import java.io.File;
+import java.io.IOException;
+import java.util.*;
 
 public class ComputedImage {
     private final int id;
-    private final ConnectedComponent component;
-    private final Joints joints;
-    private final double[] temperatureCounts;
     private final DoubleFV extractedFeature;
 
-    public ComputedImage(int id, ConnectedComponent component, Joints joints, double[] temperatureCounts) {
+    public ComputedImage(int id, MBFImage image, boolean isTraining, String PATH, Predictor<Image, Joints> predictor, Float[][] temperatures) throws IOException, TranslateException {
         this.id = id;
-        this.component = component;
-        this.joints = joints;
-        this.temperatureCounts = temperatureCounts;
-        this.extractedFeature = extractSilhouetteFV().concatenate(extractJointsFV()).concatenate(extractTemperaturesFV());
-    }
 
-    public int getId() {
-        return id;
-    }
+        // Crop the image
+        image = image.extractCenter((image.getWidth() / 2) + 100, (image.getHeight() / 2) + 115, 740, 1280);
+        MBFImage segmentedImage = image.clone();
 
-    // Extract silhouette feature vector
-    public DoubleFV extractSilhouetteFV() {
-        int maxBins = 56, halfBlankBinSize = 2, count = 0, backCount = 0;
-        double[] doubleDistances = new double[maxBins - (halfBlankBinSize * 4)];
-        ArrayList<PolarPixel> pixels = new ArrayList<>();
-        Pixel centroid = component.calculateCentroidPixel();
+        // Image segmentation
+        KMSpatialColourSegmenter segmenter = new KMSpatialColourSegmenter(ColourSpace.CIE_Lab, 2);
+        SegmentationUtilities.renderSegments(image, segmenter.segment(image));
 
-        for (Pixel pixel : component.getOuterBoundary()) {
-            pixels.add(new PolarPixel(calculateDistance(pixel, centroid), calculateAngle(pixel, centroid)));
-        }
-        pixels.sort(Comparator.comparingDouble(PolarPixel::angle));
+        // Get the two connected components
+        GreyscaleConnectedComponentLabeler labeler = new GreyscaleConnectedComponentLabeler();
+        List<ConnectedComponent> components = labeler.findComponents(image.flatten());
 
-        ArrayList<Double> bin = new ArrayList<>();
-        for (PolarPixel pixel : pixels) {
-            bin.add(pixel.radius());
+        // Get the person component
+        components.sort(Comparator.comparingInt(PixelSet::calculateArea));
+        Collections.reverse(components);
+        ConnectedComponent component = components.get(1);
 
-            if ((pixel.angle() > (((2 * Math.PI) / maxBins) * (count + 1))) || pixel == pixels.get(pixels.size() - 1)) {
-                double sum = 0;
-                for (double value : bin) {
-                    sum += value;
+        // Get the boundary pixels and all contained pixels
+        Set<Pixel> pixels = component.getPixels();
+
+        // Remove all unnecessary pixels from image
+        for (int y = 0; y < segmentedImage.getHeight(); y++) {
+            for (int x = 0; x < segmentedImage.getWidth(); x++) {
+                if (!pixels.contains(new Pixel(x, y))) {
+                    segmentedImage.getBand(0).pixels[y][x] = 1;
+                    segmentedImage.getBand(1).pixels[y][x] = 1;
+                    segmentedImage.getBand(2).pixels[y][x] = 1;
                 }
-
-                if ((count > halfBlankBinSize && count < ((maxBins / 2) - halfBlankBinSize))
-                        || (count > ((maxBins / 2) + halfBlankBinSize) && count < (maxBins - halfBlankBinSize))) {
-                    doubleDistances[count - backCount] = sum / bin.size();
-                } else {
-                    backCount++;
-                }
-                count++;
-                bin.clear();
             }
         }
-        return new DoubleFV(doubleDistances).normaliseFV();
-    }
 
-    // Extract joints feature vector
-    public DoubleFV extractJointsFV() {
+        // Print the original image
+        String resultPath = isTraining ? "training" : "testing";
+        File imageFile = new File(PATH + "segmented\\" + resultPath + "\\" + id + ".jpg");
+        ImageUtilities.write(segmentedImage, imageFile);
+
+        // Creates the new images
+        MBFImage temperatureImage = segmentedImage.clone();
+        MBFImage jointsImage = segmentedImage.clone();
         Rectangle boundingBox = component.calculateRegularBoundingBox();
-        Pixel centroid = component.calculateCentroidPixel();
-        List<Joints.Joint> jointsList = joints.getJoints();
-        ArrayList<Pixel> jointPixels = new ArrayList<>();
 
-        // Creates a pose model
-        for (Joints.Joint joint : jointsList) {
-            Pixel pixel = new Pixel((int) (joint.getX() * boundingBox.getWidth()), (int) (joint.getY() *  boundingBox.getHeight()));
+        // Find the joints from the segmented image
+        Image jointlessImage = BufferedImageFactory.getInstance().fromImage(ImageIO.read(imageFile));
+        Joints joints = predictor.predict(jointlessImage);
+
+        // Find the joints from the segmented image and draw them
+        ArrayList<Pixel> jointPixels = new ArrayList<>();
+        for (Joints.Joint joint : joints.getJoints()) {
+            Pixel pixel = new Pixel((int) (joint.getX() * jointsImage.getWidth()), (int) (joint.getY() * jointsImage.getHeight()));
+            jointsImage.drawPoint(pixel, RGBColour.RED, 6);
             jointPixels.add(pixel);
         }
 
+        // Draw the component outline
+        for (Pixel pixel : component.getOuterBoundary()) {
+            jointsImage.drawPoint(pixel, RGBColour.GREEN, 4);
+        }
+
+        // Creates a pose model
         PoseModel poseModel = new PoseModel(jointPixels.get(0), // nose
                 jointPixels.get(1), // right eye
                 jointPixels.get(2), // left eye
@@ -93,14 +105,101 @@ public class ComputedImage {
                 jointPixels.get(jointPixels.size() - 2), // right ankle
                 jointPixels.get(jointPixels.size() - 1)); // left ankle
 
+        // Draw the centroid point
+        Pixel centroid = component.calculateCentroidPixel(); // calculateMiddle(calculateMiddle(poseModel.leftShoulder(), poseModel.rightShoulder()), calculateMiddle(poseModel.rightHip(), poseModel.leftHip()));
+        jointsImage.drawPoint(centroid, RGBColour.BLUE, 6);
+
+        // Print the joints image
+        File jointsImageFile = new File(PATH + "joints\\" + resultPath + "\\" + id + ".jpg");
+        ImageUtilities.write(jointsImage, jointsImageFile);
+
+        // Creates the temperature image
+        double[] temperatureCounts = new double[48];
+
+        for (int y = 0; y < temperatureImage.getHeight(); y++) {
+            for (int x = 0; x < temperatureImage.getWidth(); x++) {
+                if (pixels.contains(new Pixel(x, y))) {
+                    double divide = ((float) temperatureImage.getHeight() - (float) y) / boundingBox.getHeight();
+                    double doubleIndex = (divide * temperatures.length) / 2f;
+                    int index = (int) Math.floor(doubleIndex);
+
+                    // Splits the image into left and right
+                    if (x > centroid.getX()) {
+                        index += temperatures.length / 2f;
+                    }
+
+                    // Sets the temperature of the pixel
+                    try {
+                        Float[] temperature = temperatures[index];
+                        temperatureImage.getBand(0).pixels[y][x] = temperature[0];
+                        temperatureImage.getBand(1).pixels[y][x] = temperature[1];
+                        temperatureImage.getBand(2).pixels[y][x] = temperature[2];
+
+                        if (temperatureCounts[index] == 0) {
+                            temperatureCounts[index] = 1;
+                        } else {
+                            temperatureCounts[index] = temperatureCounts[index] + 1;
+                        }
+                    } catch (Exception ignored) { }
+                }
+            }
+        }
+
+        // Prints the temperature image
+        File temperatureImageFile = new File(PATH + "temperature\\" + resultPath + "\\" + id + ".jpg");
+        ImageUtilities.write(temperatureImage, temperatureImageFile);
+
+        // Extract silhouette feature vector
+        int maxBins = 56, halfBlankBinSize = 2, binCount = 0, backCount = 0;
+        double[] doubleDistances = new double[maxBins - (halfBlankBinSize * 4)];
+        ArrayList<PolarPixel> borderPixels = new ArrayList<>();
+
+        for (Pixel pixel : component.getOuterBoundary()) {
+            borderPixels.add(new PolarPixel(calculateDistance(pixel, centroid), calculateAngle(pixel, centroid)));
+        }
+        borderPixels.sort(Comparator.comparingDouble(PolarPixel::angle));
+
+        ArrayList<Double> bin = new ArrayList<>();
+        for (PolarPixel pixel : borderPixels) {
+            bin.add(pixel.radius());
+
+            if ((pixel.angle() > (((2 * Math.PI) / maxBins) * (binCount + 1))) || pixel == borderPixels.get(borderPixels.size() - 1)) {
+                double sum = 0;
+                for (double value : bin) {
+                    sum += value;
+                }
+
+                if ((binCount > halfBlankBinSize && binCount < ((maxBins / 2) - halfBlankBinSize))
+                        || (binCount > ((maxBins / 2) + halfBlankBinSize) && binCount < (maxBins - halfBlankBinSize))) {
+                    doubleDistances[binCount - backCount] = sum / bin.size();
+                } else {
+                    backCount++;
+                }
+                binCount++;
+                bin.clear();
+            }
+        }
+        DoubleFV silhouetteFV = new DoubleFV(doubleDistances).normaliseFV();
+
+        // Extract joints feature vector
+        double[] jointsArray = new double[48];
+
         // Invariant features to centroid
-        double[] jointsArray = new double[35];
-        for (int i = 0; i < 9; i++) {
-            jointsArray[i] = calculateDistance(jointPixels.get(i), centroid);
-        }
-        for (int i = 1; i < 7; i++) {
-            jointsArray[i] = calculateDistance(jointPixels.get(jointPixels.size() - i), centroid);
-        }
+        jointsArray[0] = calculateDistance(poseModel.nose(), centroid);
+        jointsArray[1] = calculateDistance(poseModel.rightEye(), centroid);
+        jointsArray[2] = calculateDistance(poseModel.leftEye(), centroid);
+        jointsArray[3] = calculateDistance(poseModel.rightEar(), centroid);
+        jointsArray[4] = calculateDistance(poseModel.leftEar(), centroid);
+        jointsArray[5] = calculateDistance(poseModel.rightShoulder(), centroid);
+        jointsArray[6] = calculateDistance(poseModel.leftShoulder(), centroid);
+        jointsArray[7] = calculateDistance(poseModel.rightElbow(), centroid);
+        jointsArray[8] = calculateDistance(poseModel.leftElbow(), centroid);
+        jointsArray[9] = calculateDistance(poseModel.rightHip(), centroid);
+        jointsArray[10] = calculateDistance(poseModel.leftHip(), centroid);
+        jointsArray[11] = calculateDistance(poseModel.rightKnee(), centroid);
+        jointsArray[12] = calculateDistance(poseModel.leftKnee(), centroid);
+        jointsArray[13] = calculateDistance(poseModel.rightAnkle(), centroid);
+        jointsArray[14] = calculateDistance(poseModel.leftAnkle(), centroid);
 
         // Inter-face distances
         jointsArray[15] = calculateDistance(poseModel.leftEar(), poseModel.leftEye());
@@ -128,7 +227,15 @@ public class ComputedImage {
         jointsArray[33] = calculateDistance(poseModel.leftKnee(), poseModel.leftAnkle());
         jointsArray[34] = calculateDistance(poseModel.rightKnee(), poseModel.rightAnkle());
 
-        return new DoubleFV(jointsArray).normaliseFV();
+        for (int i = 35; i < 48; i++) {
+            jointsArray[i] = 0;
+        }
+        DoubleFV jointsFV = new DoubleFV(jointsArray).normaliseFV();
+
+        // Extract temperatures feature vector
+        DoubleFV temperaturesFV = new DoubleFV(temperatureCounts).normaliseFV();
+
+        this.extractedFeature = silhouetteFV.concatenate(jointsFV).concatenate(temperaturesFV);
     }
 
     // Calculate the distance between two pixels
@@ -136,6 +243,7 @@ public class ComputedImage {
         return Math.sqrt(Math.pow(pixelA.getX() - pixelB.getX(), 2) + Math.pow(pixelA.getY() - pixelB.getY(), 2));
     }
 
+    // Calculate the angle between two pixels
     public double calculateAngle(Pixel pixelA, Pixel pixelB) {
         double xDiff = pixelA.getX() - pixelB.getX(), yDiff = pixelA.getY() - pixelB.getY();
         double angle = Math.atan(yDiff / xDiff);
@@ -157,13 +265,13 @@ public class ComputedImage {
         return angle;
     }
 
-    // Extract temperatures feature vector
-    public DoubleFV extractTemperaturesFV() {
-        double[] counts = new double[12];
-        for (int i = (temperatureCounts.length / 2) - 6; i < (temperatureCounts.length / 2) + 6; i++) {
-            counts[i - ((temperatureCounts.length / 2) - 6)] = temperatureCounts[i];
-        }
-        return new DoubleFV(temperatureCounts).normaliseFV();
+    // Find the middle pixel between two pixels
+    public Pixel calculateMiddle(Pixel pixelA, Pixel pixelB) {
+        return new Pixel(Math.round((pixelA.getX() + pixelB.getX()) / 2f), Math.round((pixelA.getY() + pixelB.getY()) / 2f));
+    }
+
+    public int getId() {
+        return id;
     }
 
     public DoubleFV getExtractedFeature() {

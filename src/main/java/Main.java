@@ -1,6 +1,5 @@
 import ai.djl.Application;
 import ai.djl.inference.Predictor;
-import ai.djl.modality.cv.BufferedImageFactory;
 import ai.djl.modality.cv.Image;
 import ai.djl.modality.cv.output.Joints;
 import ai.djl.repository.zoo.Criteria;
@@ -10,24 +9,15 @@ import org.openimaj.feature.DoubleFVComparison;
 import org.openimaj.feature.FeatureVector;
 import org.openimaj.image.ImageUtilities;
 import org.openimaj.image.MBFImage;
-import org.openimaj.image.colour.ColourSpace;
 import org.openimaj.image.colour.RGBColour;
-import org.openimaj.image.connectedcomponent.GreyscaleConnectedComponentLabeler;
-import org.openimaj.image.pixel.ConnectedComponent;
-import org.openimaj.image.pixel.Pixel;
-import org.openimaj.image.pixel.PixelSet;
-import org.openimaj.image.processing.resize.ResizeProcessor;
-import org.openimaj.image.segmentation.KMSpatialColourSegmenter;
-import org.openimaj.image.segmentation.SegmentationUtilities;
-import org.openimaj.math.geometry.shape.Rectangle;
 import org.openimaj.ml.pca.FeatureVectorPCA;
 
-import javax.imageio.ImageIO;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class Main {
@@ -67,17 +57,17 @@ public class Main {
         }
 
         // Read and print the training images
-        int count = 1;
+        int id = 1;
         for (MBFImage trainingImage : training.get()) {
-            trainingImages.add(readImage(trainingImage, count, true));
-            count++;
+            trainingImages.add(new ComputedImage(id, trainingImage, true, PATH, predictor, temperatures));
+            id++;
         }
 
         // Read and print the testing images
-        count = 1;
+        id = 1;
         for (MBFImage testingImage : testing.get()) {
-            testingImages.add(readImage(testingImage, count, false));
-            count++;
+            testingImages.add(new ComputedImage(id, testingImage, false, PATH, predictor, temperatures));
+            id++;
         }
 
         // Learning PCA basis
@@ -169,101 +159,6 @@ public class Main {
         fileWriter.close();
 
         System.out.println("\n" + results);
-    }
-
-    static ComputedImage readImage(MBFImage image, int count, boolean isTraining) throws IOException, TranslateException {
-        // Crop the image
-        image = image.extractCenter((image.getWidth() / 2) + 100, (image.getHeight() / 2) + 115, 740, 1280);
-        image.processInplace(new ResizeProcessor(1f));
-        MBFImage segmentedImage = image.clone();
-
-        // Image segmentation
-        KMSpatialColourSegmenter segmenter = new KMSpatialColourSegmenter(ColourSpace.CIE_Lab, 2);
-        SegmentationUtilities.renderSegments(image, segmenter.segment(image));
-
-        // Get the two connected components
-        GreyscaleConnectedComponentLabeler labeler = new GreyscaleConnectedComponentLabeler();
-        List<ConnectedComponent> components = labeler.findComponents(image.flatten());
-
-        // Get the person component
-        components.sort(Comparator.comparingInt(PixelSet::calculateArea));
-        Collections.reverse(components);
-        ConnectedComponent component = components.get(1);
-
-        // Get the boundary pixels and all contained pixels
-        Set<Pixel> pixels = component.getPixels();
-
-        // Remove all unnecessary pixels from image
-        for (int y = 0; y < segmentedImage.getHeight(); y++) {
-            for (int x = 0; x < segmentedImage.getWidth(); x++) {
-                if (!pixels.contains(new Pixel(x, y))) {
-                    segmentedImage.getBand(0).pixels[y][x] = 1;
-                    segmentedImage.getBand(1).pixels[y][x] = 1;
-                    segmentedImage.getBand(2).pixels[y][x] = 1;
-                }
-            }
-        }
-
-        // Creates the temperature image
-        MBFImage temperatureImage = segmentedImage.clone();
-        Rectangle boundingBox = component.calculateRegularBoundingBox();
-        Pixel centroid = component.calculateCentroidPixel();
-        double[] temperatureCounts = new double[48];
-
-        for (int y = 0; y < temperatureImage.getHeight(); y++) {
-            for (int x = 0; x < temperatureImage.getWidth(); x++) {
-                if (pixels.contains(new Pixel(x, y))) {
-                    double divide = ((float) temperatureImage.getHeight() - (float) y) / boundingBox.getHeight();
-                    double doubleIndex = (divide * temperatures.length) / 2f;
-                    int index = (int) Math.floor(doubleIndex);
-
-                    if (x > centroid.getX()) {
-                        index += temperatures.length / 2f;
-                    }
-
-                    // Sets the temperature of the pixel
-                    try {
-                        Float[] temperature = temperatures[index];
-                        temperatureImage.getBand(0).pixels[y][x] = temperature[0];
-                        temperatureImage.getBand(1).pixels[y][x] = temperature[1];
-                        temperatureImage.getBand(2).pixels[y][x] = temperature[2];
-
-                        if (temperatureCounts[index] == 0) {
-                            temperatureCounts[index] = 1;
-                        } else {
-                            temperatureCounts[index] = temperatureCounts[index] + 1;
-                        }
-                    } catch (Exception ignored) { }
-                }
-            }
-        }
-
-        // Print the original image
-        String resultPath = isTraining ? "training" : "testing";
-        File imageFile = new File(PATH + "segmented\\" + resultPath + "\\" + count + ".jpg");
-        ImageUtilities.write(segmentedImage, imageFile);
-
-        // Print the temperature image
-        File temperatureImageFile = new File(PATH + "temperature\\" + resultPath + "\\" + count + ".jpg");
-        ImageUtilities.write(temperatureImage.extractROI(boundingBox), temperatureImageFile);
-
-        // Print the joints image
-        File jointsImageFile = new File(PATH + "joints\\" + resultPath + "\\" + count + ".jpg");
-        Image jointsImage = BufferedImageFactory.getInstance().fromImage(ImageIO.read(imageFile));
-        Joints joints = predictor.predict(jointsImage);
-
-        // Find the joints from the segmented image
-        for (Joints.Joint joint : joints.getJoints()) {
-            Pixel pixel = new Pixel((int) (joint.getX() * segmentedImage.getWidth()), (int) (joint.getY() * segmentedImage.getHeight()));
-            segmentedImage.drawPoint(pixel, RGBColour.RED, 5);
-        }
-
-        // Draw the centroid point
-        segmentedImage.drawPoint(component.calculateCentroidPixel(), RGBColour.RED, 5);
-        segmentedImage = segmentedImage.extractROI(boundingBox);
-        ImageUtilities.write(segmentedImage, jointsImageFile);
-
-        return new ComputedImage(count, component, joints, temperatureCounts);
     }
 
     // Classification check
