@@ -25,13 +25,16 @@ public class Main {
     private static Predictor<Image, Joints> predictor;
     private static final Float[][] temperatures = new Float[48][];
 
+    /**
+     * Runs the classification and prints the results
+     */
     public static void main(String[] args) throws IOException, TranslateException {
         AtomicReference<VFSListDataset<MBFImage>> training = new AtomicReference<>(new VFSListDataset<>(PATH + "biometrics\\training", ImageUtilities.MBFIMAGE_READER));
         AtomicReference<VFSListDataset<MBFImage>> testing = new AtomicReference<>(new VFSListDataset<>(PATH + "biometrics\\testing", ImageUtilities.MBFIMAGE_READER));
 
-        ArrayList<ComputedImage> trainingImages = new ArrayList<>();
-        ArrayList<ComputedImage> testingImages = new ArrayList<>();
-        ArrayList<FeatureVector> featureVectors = new ArrayList<>();
+        ArrayList<PersonFV> trainingFVs = new ArrayList<>();
+        ArrayList<PersonFV> testingFVs = new ArrayList<>();
+        ArrayList<FeatureVector> FVs = new ArrayList<>();
 
         long startTime = System.currentTimeMillis();
 
@@ -59,65 +62,65 @@ public class Main {
         // Read and print the training images
         int id = 1;
         for (MBFImage trainingImage : training.get()) {
-            trainingImages.add(new ComputedImage(id, trainingImage, true, PATH, predictor, temperatures));
+            trainingFVs.add(new PersonFV(id, trainingImage, true, PATH, predictor, temperatures));
             id++;
         }
 
         // Read and print the testing images
         id = 1;
         for (MBFImage testingImage : testing.get()) {
-            testingImages.add(new ComputedImage(id, testingImage, false, PATH, predictor, temperatures));
+            testingFVs.add(new PersonFV(id, testingImage, false, PATH, predictor, temperatures));
             id++;
         }
 
         // Learning PCA basis
-        for (ComputedImage trainingImage : trainingImages) {
-            featureVectors.add(trainingImage.getExtractedFeature());
+        for (PersonFV trainingFV : trainingFVs) {
+            FVs.add(trainingFV.getExtractedFeature());
         }
         FeatureVectorPCA pca = new FeatureVectorPCA();
-        pca.learnBasis(featureVectors);
+        pca.learnBasis(FVs);
 
-        // Nearest neighbour to find the closest training image to each testing image
+        // Nearest neighbour to find the closest training FV to each testing FV
         float correctCount = 0f;
 
-        for (ComputedImage testingImage : testingImages) {
-            ComputedImage nearestImage = null;
+        for (PersonFV testingFV : testingFVs) {
+            PersonFV nearestFV = null;
             double nearestDistance = -1, furthestDistance = -1;
 
-            // Finds the nearest image
-            for (ComputedImage trainingImage : trainingImages) {
-                double distance = DoubleFVComparison.EUCLIDEAN.compare(pca.project(trainingImage.getExtractedFeature()), pca.project(testingImage.getExtractedFeature()));
+            // Finds the nearest FV
+            for (PersonFV trainingFV : trainingFVs) {
+                double distance = DoubleFVComparison.EUCLIDEAN.compare(pca.project(trainingFV.getExtractedFeature()), pca.project(testingFV.getExtractedFeature()));
 
+                // Checks if it's the nearest or furthest distance
                 if (nearestDistance == -1 || distance < nearestDistance) {
                     nearestDistance = distance;
-                    nearestImage = trainingImage;
+                    nearestFV = trainingFV;
                 }
-
                 if (furthestDistance == -1 || distance > furthestDistance) {
                     furthestDistance = distance;
                 }
             }
 
             // Checks classification accuracy
-            if (nearestImage != null && classificationCheck(testingImage.getId(), nearestImage.getId())) {
-                System.out.print(testingImage.getId() + " ");
+            if (nearestFV != null && classificationCheck(testingFV.getId(), nearestFV.getId())) {
                 correctCount += 1f;
             }
         }
 
-        // Histogram of distances
+        // Histogram of distances calculations
         double correctClassificationRate = (correctCount / 22f) * 100f;
         ArrayList<Double> intraDistances = new ArrayList<>(), interDistances = new ArrayList<>();
 
-        for (int i = 0; i < trainingImages.size(); i++) {
-            for (int j = i; j < trainingImages.size(); j++) {
-                ComputedImage trainingImageA = trainingImages.get(i);
-                ComputedImage trainingImageB = trainingImages.get(j);
+        for (int i = 0; i < trainingFVs.size(); i++) {
+            for (int j = i; j < trainingFVs.size(); j++) {
+                PersonFV trainingFVA = trainingFVs.get(i);
+                PersonFV trainingFVB = trainingFVs.get(j);
 
-                if (trainingImageA.getId() != trainingImageB.getId()) {
-                    double distance = DoubleFVComparison.EUCLIDEAN.compare(pca.project(trainingImageA.getExtractedFeature()), pca.project(trainingImageB.getExtractedFeature()));
+                // Calculate the distance
+                if (trainingFVA.getId() != trainingFVB.getId()) {
+                    double distance = DoubleFVComparison.EUCLIDEAN.compare(pca.project(trainingFVA.getExtractedFeature()), pca.project(trainingFVB.getExtractedFeature()));
 
-                    if (verificationCheck(trainingImageA.getId(), trainingImageB.getId())) {
+                    if (verificationCheck(trainingFVA.getId(), trainingFVB.getId())) {
                         interDistances.add(distance);
                     } else {
                         intraDistances.add(distance);
@@ -126,12 +129,13 @@ public class Main {
             }
         }
 
+        // Sort the distances to form the histogram
         interDistances.sort(Comparator.comparingDouble(o -> o));
         intraDistances.sort(Comparator.comparingDouble(o -> o));
         double EER = 0f;
         double smallestDistance = -1f;
 
-        // EER
+        // Equal error rate calculation
         for (double threshold = 0f; threshold < 1f; threshold += 0.000001f) {
             double tempThreshold = threshold;
             double FAR = interDistances.stream().filter(a -> a > tempThreshold).count() / (double) interDistances.size();
@@ -158,10 +162,15 @@ public class Main {
         fileWriter.write(results);
         fileWriter.close();
 
-        System.out.println("\n" + results);
+        System.out.println(results);
     }
 
-    // Classification check
+    /**
+     * Classification check
+     * @param testingId Testing FV id
+     * @param trainingId Training FV id
+     * @return True if correct classification
+     */
     static boolean classificationCheck(int testingId, int trainingId) {
         return switch (testingId) {
             case 1, 2 -> trainingId == 47 || trainingId == 48;
@@ -179,7 +188,12 @@ public class Main {
         };
     }
 
-    // Error rates check
+    /**
+     * Error rates check
+     * @param testingId Testing FV id
+     * @param trainingId Training FV id
+     * @return True if intra FVs
+     */
     static boolean verificationCheck(int testingId, int trainingId) {
         return switch (trainingId) {
             case 47, 48 -> testingId == 1 || testingId == 2;

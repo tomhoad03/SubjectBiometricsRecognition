@@ -21,11 +21,20 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
-public class ComputedImage {
+public class PersonFV {
     private final int id;
     private final DoubleFV extractedFeature;
 
-    public ComputedImage(int id, MBFImage image, boolean isTraining, String PATH, Predictor<Image, Joints> predictor, Float[][] temperatures) throws IOException, TranslateException {
+    /**
+     * Creates a feature vector from an image
+     * @param id The FV id
+     * @param image The image
+     * @param isTraining Is the image in the training or testing set?
+     * @param PATH The relative file path
+     * @param predictor The pose estimator predictor
+     * @param temperatures The list of colours
+     */
+    public PersonFV(int id, MBFImage image, boolean isTraining, String PATH, Predictor<Image, Joints> predictor, Float[][] temperatures) throws IOException, TranslateException {
         this.id = id;
 
         // Crop the image
@@ -238,12 +247,22 @@ public class ComputedImage {
         this.extractedFeature = silhouetteFV.concatenate(jointsFV).concatenate(temperaturesFV);
     }
 
-    // Calculate the distance between two pixels
+    /**
+     * Calculate the distance between two pixels
+     * @param pixelA Pixel A
+     * @param pixelB Pixel B
+     * @return The distance
+     */
     public double calculateDistance(Pixel pixelA, Pixel pixelB) {
         return Math.sqrt(Math.pow(pixelA.getX() - pixelB.getX(), 2) + Math.pow(pixelA.getY() - pixelB.getY(), 2));
     }
 
-    // Calculate the angle between two pixels
+    /**
+     * Calculate the angle between two pixels
+     * @param pixelA Pixel A
+     * @param pixelB pixel B
+     * @return The angle (radians)
+     */
     public double calculateAngle(Pixel pixelA, Pixel pixelB) {
         double xDiff = pixelA.getX() - pixelB.getX(), yDiff = pixelA.getY() - pixelB.getY();
         double angle = Math.atan(yDiff / xDiff);
@@ -265,21 +284,47 @@ public class ComputedImage {
         return angle;
     }
 
-    // Find the middle pixel between two pixels
-    public Pixel calculateMiddle(Pixel pixelA, Pixel pixelB) {
-        return new Pixel(Math.round((pixelA.getX() + pixelB.getX()) / 2f), Math.round((pixelA.getY() + pixelB.getY()) / 2f));
-    }
-
+    /**
+     * @return The FV id
+     */
     public int getId() {
         return id;
     }
 
+    /**
+     * @return The FV
+     */
     public DoubleFV getExtractedFeature() {
         return extractedFeature;
     }
 
+    /**
+     * A record to represent a pixel with polar coordinates
+     * @param radius
+     * @param angle
+     */
     public record PolarPixel(double radius, double angle) { }
 
+    /**
+     * A record to represent a pose
+     * @param nose
+     * @param rightEye
+     * @param leftEye
+     * @param rightEar
+     * @param leftEar
+     * @param rightShoulder
+     * @param leftShoulder
+     * @param rightElbow
+     * @param leftElbow
+     * @param rightWrist
+     * @param leftWrist
+     * @param rightHip
+     * @param leftHip
+     * @param rightKnee
+     * @param leftKnee
+     * @param rightAnkle
+     * @param leftAnkle
+     */
     public record PoseModel(Pixel nose, Pixel rightEye, Pixel leftEye, Pixel rightEar, Pixel leftEar, Pixel rightShoulder,
                             Pixel leftShoulder, Pixel rightElbow, Pixel leftElbow, Pixel rightWrist, Pixel leftWrist,
                             Pixel rightHip, Pixel leftHip, Pixel rightKnee, Pixel leftKnee, Pixel rightAnkle,
