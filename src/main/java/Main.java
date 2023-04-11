@@ -174,7 +174,7 @@ public class Main {
     static ComputedImage readImage(MBFImage image, int count, boolean isTraining) throws IOException, TranslateException {
         // Crop the image
         image = image.extractCenter((image.getWidth() / 2) + 100, (image.getHeight() / 2) + 115, 740, 1280);
-        image.processInplace(new ResizeProcessor(0.5f));
+        image.processInplace(new ResizeProcessor(1f));
         MBFImage segmentedImage = image.clone();
 
         // Image segmentation
