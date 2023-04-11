@@ -2,6 +2,7 @@ import ai.djl.modality.cv.output.Joints;
 import org.openimaj.feature.DoubleFV;
 import org.openimaj.image.pixel.ConnectedComponent;
 import org.openimaj.image.pixel.Pixel;
+import org.openimaj.math.geometry.shape.Rectangle;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -11,12 +12,14 @@ public class ComputedImage {
     private final int id;
     private final ConnectedComponent component;
     private final Joints joints;
+    private final double[] temperatureCounts;
     private DoubleFV extractedFeature;
 
-    public ComputedImage(int id, ConnectedComponent component, Joints joints) {
+    public ComputedImage(int id, ConnectedComponent component, Joints joints, double[] temperatureCounts) {
         this.id = id;
         this.component = component;
         this.joints = joints;
+        this.temperatureCounts = temperatureCounts;
     }
 
     public int getId() {
@@ -24,7 +27,7 @@ public class ComputedImage {
     }
 
     public void extractFeature() {
-        this.extractedFeature = extractSilhouetteFV().concatenate(extractJointsFV());
+        this.extractedFeature = extractSilhouetteFV().concatenate(extractJointsFV()).concatenate(extractTemperaturesFV());
     }
 
     // Extract silhouette feature vector
@@ -64,7 +67,8 @@ public class ComputedImage {
 
     // Extract joints feature vector
     public DoubleFV extractJointsFV() {
-        double width = component.calculateRegularBoundingBox().getWidth(), height = component.calculateRegularBoundingBox().getHeight();
+        Rectangle boundingBox = component.calculateRegularBoundingBox();
+        double width = boundingBox.getWidth(), height = boundingBox.getHeight();
         Pixel centroid = component.calculateCentroidPixel();
         List<Joints.Joint> jointsList = joints.getJoints();
         ArrayList<Pixel> jointPixels = new ArrayList<>();
@@ -155,6 +159,11 @@ public class ComputedImage {
             angle = 0;
         }
         return angle;
+    }
+
+    // Extract temperatures feature vector
+    public DoubleFV extractTemperaturesFV() {
+        return new DoubleFV(temperatureCounts).normaliseFV();
     }
 
     public DoubleFV getExtractedFeature() {

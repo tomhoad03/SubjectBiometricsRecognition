@@ -18,6 +18,7 @@ import org.openimaj.image.pixel.Pixel;
 import org.openimaj.image.pixel.PixelSet;
 import org.openimaj.image.processing.resize.ResizeProcessor;
 import org.openimaj.image.processor.PixelProcessor;
+import org.openimaj.math.geometry.shape.Rectangle;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
 import org.openimaj.ml.clustering.kmeans.FloatKMeans;
@@ -34,8 +35,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
-    private static final Float[][] colours = new Float[][]{RGBColour.RED, RGBColour.ORANGE, RGBColour.YELLOW, RGBColour.GREEN, RGBColour.CYAN, RGBColour.BLUE, RGBColour.MAGENTA};
     private static Predictor<Image, Joints> predictor;
+    private static final Float[][] temperatures = new Float[48][];
 
     public static void main(String[] args) throws IOException, TranslateException {
         AtomicReference<VFSListDataset<MBFImage>> training = new AtomicReference<>(new VFSListDataset<>(PATH + "biometrics\\training", ImageUtilities.MBFIMAGE_READER));
@@ -60,6 +61,11 @@ public class Main {
                     .newPredictor();
         } catch (Exception e) {
             e.printStackTrace();
+        }
+
+        // Colour generation
+        for (int i = 0; i < temperatures.length; i++) {
+            temperatures[i] = RGBColour.randomColour();
         }
 
         // Read and print the training images
@@ -176,7 +182,7 @@ public class Main {
         // Crop the image
         image = image.extractCenter((image.getWidth() / 2) + 100, (image.getHeight() / 2) + 115, 740, 1280);
         image.processInplace(new ResizeProcessor(0.5f));
-        MBFImage clonedImage = image.clone();
+        MBFImage segmentedImage = image.clone();
         image = ColourSpace.convert(image, ColourSpace.CIE_Lab);
 
         // Get the pixel data
@@ -218,45 +224,73 @@ public class Main {
         Set<Pixel> pixels = component.getPixels();
 
         // Remove all unnecessary pixels from image
-        for (int y = 0; y < clonedImage.getHeight(); y++) {
-            for (int x = 0; x < clonedImage.getWidth(); x++) {
+        for (int y = 0; y < segmentedImage.getHeight(); y++) {
+            for (int x = 0; x < segmentedImage.getWidth(); x++) {
                 if (!pixels.contains(new Pixel(x, y))) {
-                    clonedImage.getBand(0).pixels[y][x] = 1;
-                    clonedImage.getBand(1).pixels[y][x] = 1;
-                    clonedImage.getBand(2).pixels[y][x] = 1;
+                    segmentedImage.getBand(0).pixels[y][x] = 1;
+                    segmentedImage.getBand(1).pixels[y][x] = 1;
+                    segmentedImage.getBand(2).pixels[y][x] = 1;
+                }
+            }
+        }
+
+        // Creates the temperature image
+        MBFImage temperatureImage = segmentedImage.clone();
+        Rectangle boundingBox = component.calculateRegularBoundingBox();
+        Pixel centroid = component.calculateCentroidPixel();
+        double componentHeight = boundingBox.getHeight();
+        double[] temperatureCounts = new double[48];
+
+        for (int y = 0; y < temperatureImage.getHeight(); y++) {
+            for (int x = 0; x < temperatureImage.getWidth(); x++) {
+                if (pixels.contains(new Pixel(x, y))) {
+                    double divide = ((float) temperatureImage.getHeight() - (float) y) / componentHeight;
+                    double doubleIndex = (divide * temperatures.length) / 2f;
+                    int index = (int) Math.floor(doubleIndex);
+
+                    if (x > centroid.getX()) {
+                        index += temperatures.length / 2f;
+                    }
+                    try {
+                        Float[] temperature = temperatures[index];
+                        temperatureImage.getBand(0).pixels[y][x] = temperature[0];
+                        temperatureImage.getBand(1).pixels[y][x] = temperature[1];
+                        temperatureImage.getBand(2).pixels[y][x] = temperature[2];
+
+                        if (temperatureCounts[index] == 0) {
+                            temperatureCounts[index] = 1;
+                        } else {
+                            temperatureCounts[index] = temperatureCounts[index] + 1;
+                        }
+                    } catch (Exception ignored) { }
                 }
             }
         }
 
         // Print the original image
         String resultPath = isTraining ? "training" : "testing";
-        File imageFile = new File(PATH + "computed\\" + resultPath + "\\" + count + ".jpg");
-        ImageUtilities.write(clonedImage, imageFile);
+        File imageFile = new File(PATH + "segmented\\" + resultPath + "\\" + count + ".jpg");
+        ImageUtilities.write(segmentedImage, imageFile);
+
+        // Print the temperature image
+        File temperatureImageFile = new File(PATH + "temperature\\" + resultPath + "\\" + count + ".jpg");
+        temperatureImage = temperatureImage.extractROI(boundingBox);
+        ImageUtilities.write(temperatureImage, temperatureImageFile);
 
         // Find the joints of training images
         File jointsImageFile = new File(PATH + "joints\\" + resultPath + "\\" + count + ".jpg");
         Image jointsImage = BufferedImageFactory.getInstance().fromImage(ImageIO.read(imageFile));
         Joints joints = predictor.predict(jointsImage);
 
-        int countColour = 0;
         for (Joints.Joint joint : joints.getJoints()) {
-            Pixel pixel = new Pixel((int) (joint.getX() * clonedImage.getWidth()), (int) (joint.getY() * clonedImage.getHeight()));
-
-            clonedImage.drawPoint(pixel, colours[countColour], 5);
-            clonedImage.drawPolygon(component.toPolygon(), RGBColour.RED);
-
-            if (countColour < colours.length - 1) {
-                countColour++;
-            } else {
-                countColour = 0;
-            }
+            Pixel pixel = new Pixel((int) (joint.getX() * segmentedImage.getWidth()), (int) (joint.getY() * segmentedImage.getHeight()));
+            segmentedImage.drawPoint(pixel, RGBColour.RED, 5);
         }
-        clonedImage.drawPoint(component.calculateCentroidPixel(), RGBColour.RED, 5);
-        clonedImage.drawPolygon(component.toPolygon(), RGBColour.RED);
+        segmentedImage.drawPoint(component.calculateCentroidPixel(), RGBColour.RED, 5);
+        segmentedImage = segmentedImage.extractROI(boundingBox);
+        ImageUtilities.write(segmentedImage, jointsImageFile);
 
-        clonedImage = clonedImage.extractROI(component.calculateRegularBoundingBox());
-        ImageUtilities.write(clonedImage, jointsImageFile);
-        return new ComputedImage(count, component, joints);
+        return new ComputedImage(count, component, joints, temperatureCounts);
     }
 
     // Classification checks
