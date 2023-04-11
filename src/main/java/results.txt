@@ -1,7 +1,3 @@
-Correct Classification Rate (CCR) = 36.363636%
-Nearest Distance Mean: 0.016338686
-Correct Distance Mean: 0.038698964
-Furthest Distance Mean: 0.04909952
-Equal Error Rate: 50.0%
-EER Threshold: 0.043626
-Duration: 188715ms
+Correct Classification Rate (CCR) = 40.909092%
+Equal Error Rate: 52.272728%
+Duration: 49563ms

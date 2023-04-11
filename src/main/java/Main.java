@@ -16,10 +16,8 @@ import org.openimaj.image.connectedcomponent.GreyscaleConnectedComponentLabeler;
 import org.openimaj.image.pixel.ConnectedComponent;
 import org.openimaj.image.pixel.Pixel;
 import org.openimaj.image.pixel.PixelSet;
-import org.openimaj.image.processing.convolution.FFastGaussianConvolve;
 import org.openimaj.image.processing.resize.ResizeProcessor;
 import org.openimaj.image.processor.PixelProcessor;
-import org.openimaj.image.typography.hershey.HersheyFont;
 import org.openimaj.ml.clustering.FloatCentroidsResult;
 import org.openimaj.ml.clustering.assignment.HardAssigner;
 import org.openimaj.ml.clustering.kmeans.FloatKMeans;
@@ -37,8 +35,6 @@ import java.util.concurrent.atomic.AtomicReference;
 public class Main {
     private static final String PATH = Paths.get("").toAbsolutePath() + "\\src\\main\\java\\";
     private static final Float[][] colours = new Float[][]{RGBColour.RED, RGBColour.ORANGE, RGBColour.YELLOW, RGBColour.GREEN, RGBColour.CYAN, RGBColour.BLUE, RGBColour.MAGENTA};
-    private static final String[] bodyParts = new String[]{"Nose", "Right Eye", "Left Eye", "Right Ear", "Left Ear", "Right Shoulder", "Left Shoulder", "Right Elbow", "Left Elbow", "Right Hand", "Left Hand", "Right Hip", "Left Hip", "Right Knee", "Left Knee", "Right Foot", "Left Foot"};
-    private static final float SPEED_FACTOR = 1f; // 1f - Normal running, 0.25f - Fast running
     private static Predictor<Image, Joints> predictor;
 
     public static void main(String[] args) throws IOException, TranslateException {
@@ -80,16 +76,92 @@ public class Main {
             count++;
         }
 
-        // Print the results
-        double[] classificationResults = classifyImages(trainingImages, testingImages);
+        // Creates feature vectors from each image
+        ArrayList<FeatureVector> featureVectors = new ArrayList<>();
+
+        for (ComputedImage trainingImage : trainingImages) {
+            trainingImage.extractFeature();
+            featureVectors.add(trainingImage.getExtractedFeature());
+        }
+        for (ComputedImage testingImage : testingImages) {
+            testingImage.extractFeature();
+        }
+
+        // Learning PCA basis
+        FeatureVectorPCA pca = new FeatureVectorPCA();
+        pca.learnBasis(featureVectors);
+
+        // Nearest neighbour to find the closest training image to each testing image
+        float correctCount = 0f;
+
+        for (ComputedImage testingImage : testingImages) {
+            ComputedImage nearestImage = null;
+            double nearestDistance = -1, furthestDistance = -1;
+
+            // Finds the nearest image
+            for (ComputedImage trainingImage : trainingImages) {
+                double distance = DoubleFVComparison.EUCLIDEAN.compare(pca.project(trainingImage.getExtractedFeature()), pca.project(testingImage.getExtractedFeature()));
+
+                if (nearestDistance == -1 || distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearestImage = trainingImage;
+                } else if (furthestDistance == -1 || distance > furthestDistance) {
+                    furthestDistance = distance;
+                }
+            }
+
+            // Checks classification accuracy
+            if (nearestImage != null && classificationCheck(testingImage.getId(), nearestImage.getId())) {
+                correctCount += 1f;
+            }
+        }
+
+        // Histogram of distances
+        double correctClassificationRate = (correctCount / 22f) * 100f;
+        ArrayList<Double> intraDistances = new ArrayList<>(), interDistances = new ArrayList<>();
+
+        for (int i = 0; i < trainingImages.size(); i++) {
+            for (int j = i; j < trainingImages.size(); j++) {
+                ComputedImage trainingImageA = trainingImages.get(i);
+                ComputedImage trainingImageB = trainingImages.get(j);
+
+                if (trainingImageA.getId() != trainingImageB.getId()) {
+                    double distance = DoubleFVComparison.EUCLIDEAN.compare(trainingImageA.getExtractedFeature(), trainingImageB.getExtractedFeature());
+
+                    if (distancesCheck(trainingImageA.getId(), trainingImageB.getId())) {
+                        interDistances.add(distance);
+                    } else {
+                        intraDistances.add(distance);
+                    }
+                }
+            }
+        }
+
+        interDistances.sort(Comparator.comparingDouble(o -> o));
+        intraDistances.sort(Comparator.comparingDouble(o -> o));
+        double EER = 0f;
+        double smallestDistance = -1f;
+
+        // EER
+        for (double threshold = 0f; threshold < 1f; threshold += 0.000001f) {
+            double tempThreshold = threshold;
+            double FAR = interDistances.stream().filter(a -> a > tempThreshold).count() / (double) interDistances.size();
+            double FFR = intraDistances.stream().filter(a -> a < tempThreshold).count() / (double) intraDistances.size();
+
+            if (FAR == FFR || smallestDistance == -1 || Math.abs(FAR - FFR) < smallestDistance) {
+                EER = FAR * 100f;
+                smallestDistance = Math.abs(FAR - FFR);
+
+                if (FAR == FFR) {
+                    break;
+                }
+            }
+        }
         long endTime = System.currentTimeMillis();
 
-        String results = "Correct Classification Rate (CCR) = " + (float) classificationResults[0] + "%"
-                + "\n" + "Nearest Distance Mean: " + (float) classificationResults[1]
-                + "\n" + "Correct Distance Mean: " + (float) classificationResults[2]
-                + "\n" + "Furthest Distance Mean: " + (float) classificationResults[3]
-                + "\n" + "Equal Error Rate: " + (float) classificationResults[4] + "%"
-                + "\n" + "EER Threshold: " + (float) classificationResults[5]
+        // Print the results
+        String results = "Correct Classification Rate (CCR) = " + (float) correctClassificationRate + "%"
+                + "\n" + "Equal Error Rate: " + (float) EER + "%"
                 + "\n" + "Duration: " + (endTime - startTime) + "ms";
 
         File resultsFile = new File(PATH + "\\results.txt");
@@ -103,12 +175,9 @@ public class Main {
     static ComputedImage readImage(MBFImage image, int count, boolean isTraining) throws IOException, TranslateException {
         // Crop the image
         image = image.extractCenter((image.getWidth() / 2) + 100, (image.getHeight() / 2) + 115, 740, 1280);
-        image.processInplace(new ResizeProcessor(SPEED_FACTOR));
+        image.processInplace(new ResizeProcessor(0.5f));
         MBFImage clonedImage = image.clone();
-
-        // Apply a Gaussian blur to reduce noise
         image = ColourSpace.convert(image, ColourSpace.CIE_Lab);
-        image.processInplace(new FFastGaussianConvolve(2, 2));
 
         // Get the pixel data
         float[][] imageData = image.getPixelVectorNative(new float[image.getWidth() * image.getHeight()][3]);
@@ -169,12 +238,11 @@ public class Main {
         Image jointsImage = BufferedImageFactory.getInstance().fromImage(ImageIO.read(imageFile));
         Joints joints = predictor.predict(jointsImage);
 
-        int countColour = 0, bodyPartCount = 0;
+        int countColour = 0;
         for (Joints.Joint joint : joints.getJoints()) {
             Pixel pixel = new Pixel((int) (joint.getX() * clonedImage.getWidth()), (int) (joint.getY() * clonedImage.getHeight()));
 
             clonedImage.drawPoint(pixel, colours[countColour], 5);
-            clonedImage.drawText(bodyParts[bodyPartCount], pixel, HersheyFont.TIMES_MEDIUM, 20, RGBColour.RED);
             clonedImage.drawPolygon(component.toPolygon(), RGBColour.RED);
 
             if (countColour < colours.length - 1) {
@@ -182,10 +250,8 @@ public class Main {
             } else {
                 countColour = 0;
             }
-            bodyPartCount++;
         }
         clonedImage.drawPoint(component.calculateCentroidPixel(), RGBColour.RED, 5);
-        clonedImage.drawText("Centroid", component.calculateCentroidPixel(), HersheyFont.TIMES_MEDIUM, 20, RGBColour.RED);
         clonedImage.drawPolygon(component.toPolygon(), RGBColour.RED);
 
         clonedImage = clonedImage.extractROI(component.calculateRegularBoundingBox());
@@ -193,116 +259,36 @@ public class Main {
         return new ComputedImage(count, component, joints);
     }
 
-    // Classifies the dataset
-    static double[] classifyImages(ArrayList<ComputedImage> trainingImages, ArrayList<ComputedImage> testingImages) {
-        // Creates feature vectors from each image
-        ArrayList<FeatureVector> featureVectors = new ArrayList<>();
-
-        System.out.println("test 1");
-
-        for (ComputedImage trainingImage : trainingImages) {
-            trainingImage.extractFeature();
-            featureVectors.add(trainingImage.getExtractedFeature());
-        }
-        for (ComputedImage testingImage : testingImages) {
-            testingImage.extractFeature();
-        }
-
-        System.out.println("test 2");
-
-        // Learning PCA basis
-        FeatureVectorPCA pca = new FeatureVectorPCA();
-        pca.learnBasis(featureVectors);
-
-        System.out.println("test 3");
-
-        // Nearest neighbour to find the closest training image to each testing image
-        float correctCount = 0f;
-        double correctDistancesSum = 0f, nearestDistancesSum = 0f, furthestDistancesSum = 0f;
-
-        for (ComputedImage testingImage : testingImages) {
-            ComputedImage nearestImage = null;
-            double nearestDistance = -1, furthestDistance = -1;
-
-            // Finds the nearest image
-            for (ComputedImage trainingImage : trainingImages) {
-                double distance = DoubleFVComparison.EUCLIDEAN.compare(pca.project(trainingImage.getExtractedFeature()), pca.project(testingImage.getExtractedFeature()));
-
-                if (nearestDistance == -1 || distance < nearestDistance) {
-                    nearestDistance = distance;
-                    nearestImage = trainingImage;
-                } else if (furthestDistance == -1 || distance > furthestDistance) {
-                    furthestDistance = distance;
-                }
-
-                if (classificationTest(testingImage.getId(), trainingImage.getId())) {
-                    correctDistancesSum += distance;
-                }
-            }
-
-            // Checks classification accuracy
-            if (nearestImage != null && classificationTest(testingImage.getId(), nearestImage.getId())) {
-                correctCount += 1f;
-            } else {
-                nearestDistancesSum += nearestDistance;
-                furthestDistancesSum += furthestDistance;
-            }
-        }
-
-        // Data collection
-        double correctClassificationRate = (correctCount / 22f) * 100f;
-        double nearestDistanceMean = nearestDistancesSum / 22f;
-        double correctDistanceMean = correctDistancesSum / 44f;
-        double furthestDistanceMean = furthestDistancesSum / 22f;
-
-        // Histogram of distances
-        ArrayList<Double> intraDistances = new ArrayList<>(), interDistances = new ArrayList<>();
-
-        for (int i = 0; i < trainingImages.size(); i++) {
-            for (int j = i; j < trainingImages.size(); j++) {
-                ComputedImage trainingImageA = trainingImages.get(i);
-                ComputedImage trainingImageB = trainingImages.get(j);
-
-                if (trainingImageA.getId() != trainingImageB.getId()) {
-                    double distance = DoubleFVComparison.EUCLIDEAN.compare(trainingImageA.getExtractedFeature(), trainingImageB.getExtractedFeature());
-
-                    if (distancesTest(trainingImageA.getId(), trainingImageB.getId())) {
-                        interDistances.add(distance);
-                    } else {
-                        intraDistances.add(distance);
-                    }
-                }
-            }
-        }
-
-        interDistances.sort(Comparator.comparingDouble(o -> o));
-        intraDistances.sort(Comparator.comparingDouble(o -> o));
-        double EER = 0f;
-        double smallestDistance = -1f;
-        double finalThreshold = 0f;
-
-        // EER
-        for (double threshold = 0f; threshold < 1f; threshold += 0.000001f) {
-            double tempThreshold = threshold;
-            double FAR = interDistances.stream().filter(a -> a > tempThreshold).count() / (double) interDistances.size();
-            double FFR = intraDistances.stream().filter(a -> a < tempThreshold).count() / (double) intraDistances.size();
-
-            if (FAR == FFR || smallestDistance == -1 || Math.abs(FAR - FFR) < smallestDistance) {
-                EER = FAR * 100f;
-                finalThreshold = tempThreshold;
-                smallestDistance = Math.abs(FAR - FFR);
-
-                if (FAR == FFR) {
-                    break;
-                }
-            }
-        }
-
-        return new double[]{correctClassificationRate, nearestDistanceMean, correctDistanceMean, furthestDistanceMean, EER, finalThreshold};
+    // Classification checks
+    static boolean exactClassificationCheck(int testingId, int trainingId) {
+        return switch (testingId) {
+            case 1 -> trainingId == 48;
+            case 2 -> trainingId == 47;
+            case 3 -> trainingId == 50;
+            case 4 -> trainingId == 49;
+            case 5 -> trainingId == 52;
+            case 6 -> trainingId == 51;
+            case 7 -> trainingId == 54;
+            case 8 -> trainingId == 53;
+            case 9 -> trainingId == 56;
+            case 10 -> trainingId == 55;
+            case 11 -> trainingId == 58;
+            case 12 -> trainingId == 57;
+            case 13 -> trainingId == 60;
+            case 14 -> trainingId == 59;
+            case 15 -> trainingId == 62;
+            case 16 -> trainingId == 61;
+            case 17 -> trainingId == 64;
+            case 18 -> trainingId == 63;
+            case 19 -> trainingId == 66;
+            case 20 -> trainingId == 65;
+            case 21 -> trainingId == 88;
+            case 22 -> trainingId == 87;
+            default -> false;
+        };
     }
 
-    // Classification check
-    static boolean classificationTest(int testingId, int trainingId) {
+    static boolean classificationCheck(int testingId, int trainingId) {
         return switch (testingId) {
             case 1, 2 -> trainingId == 47 || trainingId == 48;
             case 3, 4 -> trainingId == 49 || trainingId == 50;
@@ -319,7 +305,7 @@ public class Main {
         };
     }
 
-    static boolean distancesTest(int testingId, int trainingId) {
+    static boolean distancesCheck(int testingId, int trainingId) {
         return switch (trainingId) {
             case 47, 48 -> testingId == 1 || testingId == 2;
             case 49, 50 -> testingId == 3 || testingId == 4;

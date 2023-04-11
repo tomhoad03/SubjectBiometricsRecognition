@@ -4,7 +4,6 @@ import org.openimaj.image.pixel.ConnectedComponent;
 import org.openimaj.image.pixel.Pixel;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -36,23 +35,22 @@ public class ComputedImage {
         Pixel centroid = component.calculateCentroidPixel();
 
         for (Pixel pixel : component.getOuterBoundary()) {
-            pixels.add(new PolarPixel(pixel, centroid));
+            pixels.add(new PolarPixel(calculateDistance(pixel, centroid), calculateAngle(pixel, centroid)));
         }
-        pixels.sort(Comparator.comparingDouble(o -> o.angle));
+        pixels.sort(Comparator.comparingDouble(PolarPixel::angle));
 
         ArrayList<Double> bin = new ArrayList<>();
         for (PolarPixel pixel : pixels) {
-            bin.add(pixel.radius);
+            bin.add(pixel.radius());
 
-            if ((pixel.angle > (((2 * Math.PI) / maxBins) * (count + 1))) || pixel == pixels.get(pixels.size() - 1)) {
+            if ((pixel.angle() > (((2 * Math.PI) / maxBins) * (count + 1))) || pixel == pixels.get(pixels.size() - 1)) {
                 double sum = 0;
                 for (double value : bin) {
                     sum += value;
                 }
 
-                if (count < ((maxBins / 4) - halfBlankBinSize)
-                        || (count > ((maxBins / 4) + halfBlankBinSize) && count < ((3 * (maxBins / 4)) - halfBlankBinSize))
-                        || count > ((3 * (maxBins / 4)) + halfBlankBinSize)) {
+                if ((count > halfBlankBinSize && count < ((maxBins / 2) - halfBlankBinSize))
+                        || (count > ((maxBins / 2) + halfBlankBinSize) && count < (maxBins - halfBlankBinSize))) {
                     doubleDistances[count - backCount] = sum / bin.size();
                 } else {
                     backCount++;
@@ -66,58 +64,107 @@ public class ComputedImage {
 
     // Extract joints feature vector
     public DoubleFV extractJointsFV() {
-        List<Joints.Joint> jointsList = joints.getJoints();
-        ArrayList<Double> jointRadii = new ArrayList<>();
-        ArrayList<PolarPixel> jointPixels = new ArrayList<>();
         double width = component.calculateRegularBoundingBox().getWidth(), height = component.calculateRegularBoundingBox().getHeight();
         Pixel centroid = component.calculateCentroidPixel();
+        List<Joints.Joint> jointsList = joints.getJoints();
+        ArrayList<Pixel> jointPixels = new ArrayList<>();
 
+        // Creates a pose model
         for (Joints.Joint joint : jointsList) {
-            PolarPixel polarPixel = new PolarPixel(new Pixel((int) (joint.getX() * width), (int) (joint.getY() * height)), centroid);
-            jointRadii.add(polarPixel.getRadius());
-            jointPixels.add(polarPixel);
+            Pixel pixel = new Pixel((int) (joint.getX() * width), (int) (joint.getY() * height));
+            jointPixels.add(pixel);
         }
+
+        PoseModel poseModel = new PoseModel(jointPixels.get(0), // nose
+                jointPixels.get(1), // right eye
+                jointPixels.get(2), // left eye
+                jointPixels.get(3), // right ear
+                jointPixels.get(4), // left ear
+                jointPixels.get(5), // right shoulder
+                jointPixels.get(6), // left shoulder
+                jointPixels.get(7), // right elbow
+                jointPixels.get(8), // left elbow
+                jointPixels.get(jointPixels.size() - 8), // right wrist*
+                jointPixels.get(jointPixels.size() - 7), // left wrist*
+                jointPixels.get(jointPixels.size() - 6), // right hip
+                jointPixels.get(jointPixels.size() - 5), // left hip
+                jointPixels.get(jointPixels.size() - 4), // right knee
+                jointPixels.get(jointPixels.size() - 3), // left knee
+                jointPixels.get(jointPixels.size() - 2), // right ankle
+                jointPixels.get(jointPixels.size() - 1)); // left ankle
 
         // Invariant features to centroid
         double[] jointsArray = new double[35];
         for (int i = 0; i < 9; i++) {
-            jointsArray[i] = jointRadii.get(i);
+            jointsArray[i] = calculateDistance(jointPixels.get(i), centroid);
         }
-        Collections.reverse(jointRadii);
-        for (int i = 9; i < 15; i++) {
-            jointsArray[i] = jointRadii.get(i - 9);
+        for (int i = 1; i < 7; i++) {
+            jointsArray[i] = calculateDistance(jointPixels.get(jointPixels.size() - i), centroid);
         }
 
         // Inter-face distances
-        jointsArray[15] = Math.sqrt(Math.pow(jointPixels.get(4).getX() - jointPixels.get(2).getX(), 2) + Math.pow(jointPixels.get(4).getY() - jointPixels.get(2).getY(), 2)); // left ear to left eye
-        jointsArray[16] = Math.sqrt(Math.pow(jointPixels.get(2).getX() - jointPixels.get(0).getX(), 2) + Math.pow(jointPixels.get(2).getY() - jointPixels.get(0).getY(), 2)); // left eye to nose
-        jointsArray[17] = Math.sqrt(Math.pow(jointPixels.get(0).getX() - jointPixels.get(1).getX(), 2) + Math.pow(jointPixels.get(0).getY() - jointPixels.get(1).getY(), 2)); // nose to right eye
-        jointsArray[18] = Math.sqrt(Math.pow(jointPixels.get(1).getX() - jointPixels.get(3).getX(), 2) + Math.pow(jointPixels.get(1).getY() - jointPixels.get(3).getY(), 2)); // right eye to right ear
-        jointsArray[19] = Math.sqrt(Math.pow(jointPixels.get(4).getX() - jointPixels.get(3).getX(), 2) + Math.pow(jointPixels.get(4).getY() - jointPixels.get(3).getY(), 2)); // ear to ear
+        jointsArray[15] = calculateDistance(poseModel.leftEar(), poseModel.leftEye());
+        jointsArray[16] = calculateDistance(poseModel.leftEye(), poseModel.nose());
+        jointsArray[17] = calculateDistance(poseModel.nose(), poseModel.rightEye());
+        jointsArray[18] = calculateDistance(poseModel.rightEye(), poseModel.rightEar());
+        jointsArray[19] = calculateDistance(poseModel.leftEar(), poseModel.rightEar());
 
         // Body widths
-        jointsArray[20] = Math.sqrt(Math.pow(jointPixels.get(6).getX() - jointPixels.get(5).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(5).getY(), 2)); // shoulder to shoulder
-        jointsArray[21] = Math.sqrt(Math.pow(jointPixels.get(8).getX() - jointPixels.get(7).getX(), 2) + Math.pow(jointPixels.get(8).getY() - jointPixels.get(7).getY(), 2)); // elbow to elbow
-        jointsArray[22] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 5).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 5).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2)); // hip to hip
-        jointsArray[23] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 3).getX() - jointPixels.get(jointPixels.size() - 4).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 3).getY() - jointPixels.get(jointPixels.size() - 4).getY(), 2)); // knee to knee
-        jointsArray[24] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 1).getX() - jointPixels.get(jointPixels.size() - 2).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 1).getY() - jointPixels.get(jointPixels.size() - 2).getY(), 2)); // ankle to ankle
+        jointsArray[20] = calculateDistance(poseModel.leftShoulder(), poseModel.rightShoulder());
+        jointsArray[21] = calculateDistance(poseModel.leftElbow(), poseModel.rightElbow());
+        jointsArray[22] = calculateDistance(poseModel.leftHip(), poseModel.rightHip());
+        jointsArray[23] = calculateDistance(poseModel.leftKnee(), poseModel.rightKnee());
+        jointsArray[24] = calculateDistance(poseModel.leftAnkle(), poseModel.rightAnkle());
 
         // Body heights
-        jointsArray[25] = Math.sqrt(Math.pow(jointPixels.get(6).getX() - jointPixels.get(8).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(8).getY(), 2)); // left elbow to left shoulder
-        jointsArray[26] = Math.sqrt(Math.pow(jointPixels.get(5).getX() - jointPixels.get(7).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(7).getY(), 2)); // right elbow to right shoulder
-        jointsArray[27] = Math.sqrt(Math.pow(jointPixels.get(6).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(6).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2)); // left hip to left shoulder
-        jointsArray[28] = Math.sqrt(Math.pow(jointPixels.get(5).getX() - jointPixels.get(jointPixels.size() - 5).getX(), 2) + Math.pow(jointPixels.get(5).getY() - jointPixels.get(jointPixels.size() - 5).getY(), 2)); // right hip to right shoulder
-        jointsArray[29] = Math.sqrt(Math.pow(jointPixels.get(8).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(8).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2)); // left hip to left elbow
-        jointsArray[30] = Math.sqrt(Math.pow(jointPixels.get(7).getX() - jointPixels.get(jointPixels.size() - 5).getX(), 2) + Math.pow(jointPixels.get(7).getY() - jointPixels.get(jointPixels.size() - 5).getY(), 2)); // right hip to right elbow
-        jointsArray[31] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 4).getX() - jointPixels.get(jointPixels.size() - 6).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 4).getY() - jointPixels.get(jointPixels.size() - 6).getY(), 2)); // left hip to left knee
-        jointsArray[32] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 3).getX() - jointPixels.get(jointPixels.size() - 5).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 3).getY() - jointPixels.get(jointPixels.size() - 5).getY(), 2)); // right hip to right knee
-        jointsArray[33] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 2).getX() - jointPixels.get(jointPixels.size() - 4).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 2).getY() - jointPixels.get(jointPixels.size() - 4).getY(), 2)); // left knee to left ankle
-        jointsArray[34] = Math.sqrt(Math.pow(jointPixels.get(jointPixels.size() - 1).getX() - jointPixels.get(jointPixels.size() - 3).getX(), 2) + Math.pow(jointPixels.get(jointPixels.size() - 1).getY() - jointPixels.get(jointPixels.size() - 3).getY(), 2)); // right knee to right ankle
+        jointsArray[25] = calculateDistance(poseModel.leftElbow(), poseModel.leftShoulder());
+        jointsArray[26] = calculateDistance(poseModel.rightElbow(), poseModel.rightShoulder());
+        jointsArray[27] = calculateDistance(poseModel.leftHip(), poseModel.leftShoulder());
+        jointsArray[28] = calculateDistance(poseModel.rightHip(), poseModel.rightShoulder());
+        jointsArray[29] = calculateDistance(poseModel.leftHip(), poseModel.leftElbow());
+        jointsArray[30] = calculateDistance(poseModel.rightHip(), poseModel.rightElbow());
+        jointsArray[31] = calculateDistance(poseModel.leftHip(), poseModel.leftKnee());
+        jointsArray[32] = calculateDistance(poseModel.rightHip(), poseModel.rightKnee());
+        jointsArray[33] = calculateDistance(poseModel.leftKnee(), poseModel.leftAnkle());
+        jointsArray[34] = calculateDistance(poseModel.rightKnee(), poseModel.rightAnkle());
 
         return new DoubleFV(jointsArray).normaliseFV();
+    }
+
+    // Calculate the distance between two pixels
+    public double calculateDistance(Pixel pixelA, Pixel pixelB) {
+        return Math.sqrt(Math.pow(pixelA.getX() - pixelB.getX(), 2) + Math.pow(pixelA.getY() - pixelB.getY(), 2));
+    }
+
+    public double calculateAngle(Pixel pixelA, Pixel pixelB) {
+        double xDiff = pixelA.getX() - pixelB.getX(), yDiff = pixelA.getY() - pixelB.getY();
+        double angle = Math.atan(yDiff / xDiff);
+
+        if (xDiff < 0) {
+            angle += Math.PI;
+        } else if (xDiff > 0 && yDiff < 0) {
+            angle += 2 * Math.PI;
+        }
+        if (xDiff == 0 && yDiff > 0) {
+            angle = Math.PI / 2;
+        } else if (xDiff == 0 && yDiff < 0) {
+            angle = 3 * (Math.PI / 2);
+        } else if (xDiff < 0 && yDiff == 0) {
+            angle = Math.PI;
+        } else if (xDiff > 0 && yDiff == 0) {
+            angle = 0;
+        }
+        return angle;
     }
 
     public DoubleFV getExtractedFeature() {
         return extractedFeature;
     }
+
+    public record PolarPixel(double radius, double angle) { }
+
+    public record PoseModel(Pixel nose, Pixel rightEye, Pixel leftEye, Pixel rightEar, Pixel leftEar, Pixel rightShoulder,
+                            Pixel leftShoulder, Pixel rightElbow, Pixel leftElbow, Pixel rightWrist, Pixel leftWrist,
+                            Pixel rightHip, Pixel leftHip, Pixel rightKnee, Pixel leftKnee, Pixel rightAnkle,
+                            Pixel leftAnkle) { }
 }
