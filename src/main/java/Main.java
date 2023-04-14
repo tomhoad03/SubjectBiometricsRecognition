@@ -94,10 +94,12 @@ public class Main {
 
         // Nearest neighbour to find the closest training image to each testing image
         float correctCount = 0f;
+        ArrayList<Double> intraDistances = new ArrayList<>(), interDistances = new ArrayList<>();
+        StringBuilder histogram = new StringBuilder("idA,idB,distance,type\n");
 
         for (ComputedImage testingImage : testingImages) {
             ComputedImage nearestImage = null;
-            double nearestDistance = -1, furthestDistance = -1;
+            double nearestDistance = -1;
 
             // Finds the nearest image
             for (ComputedImage trainingImage : trainingImages) {
@@ -108,21 +110,20 @@ public class Main {
                     nearestDistance = distance;
                     nearestImage = trainingImage;
                 }
-                if (furthestDistance == -1 || distance > furthestDistance) {
-                    furthestDistance = distance;
-                }
             }
 
             // Checks if the classification is correct
-            if (nearestImage != null && classificationCheck(testingImage.getId(), nearestImage.getId())) {
-                correctCount += 1f;
+            if (nearestImage != null) {
+                if (classificationCheck(testingImage.getId(), nearestImage.getId())) {
+                    correctCount += 1f;
+                }
+                histogram.append(testingImage.getId()).append(",").append(nearestImage.getId()).append(",").append(nearestDistance).append(",inter\n");
+                interDistances.add(nearestDistance);
             }
         }
 
         // Calculating the histogram of distances
         double correctClassificationRate = (correctCount / 22f) * 100f;
-        ArrayList<Double> intraDistances = new ArrayList<>(), interDistances = new ArrayList<>();
-        StringBuilder histogram = new StringBuilder("idA,idB,distance,type\n");
 
         for (int i = 0; i < trainingImages.size(); i++) {
             for (int j = i; j < trainingImages.size(); j++) {
@@ -131,15 +132,8 @@ public class Main {
 
                 if (trainingImageA.getId() != trainingImageB.getId()) {
                     double distance = DoubleFVComparison.EUCLIDEAN.compare(pca.project(trainingImageA.getExtractedFeature()), pca.project(trainingImageB.getExtractedFeature()));
-                    histogram.append(trainingImageA.getId()).append(",").append(trainingImageB.getId()).append(",").append(distance);
-
-                    if (verificationCheck(trainingImageA.getId(), trainingImageB.getId())) {
-                        interDistances.add(distance);
-                        histogram.append(",inter\n");
-                    } else {
-                        intraDistances.add(distance);
-                        histogram.append(",intra\n");
-                    }
+                    histogram.append(trainingImageA.getId()).append(",").append(trainingImageB.getId()).append(",").append(distance).append(",intra\n");
+                    intraDistances.add(distance);
                 }
             }
         }
@@ -147,21 +141,20 @@ public class Main {
         // Sort the distances
         interDistances.sort(Comparator.comparingDouble(o -> o));
         intraDistances.sort(Comparator.comparingDouble(o -> o));
-        double EER = 0f;
-        double smallestDistance = -1f;
+        double EER = 0f, smallestDistance = -1f, finalThreshold = 0f;
 
         // Equal error rate calculation
         for (double threshold = 0f; threshold < 1f; threshold += 0.000001f) {
             double tempThreshold = threshold;
             double FAR = interDistances.stream().filter(a -> a > tempThreshold).count() / (double) interDistances.size();
-            double FFR = intraDistances.stream().filter(a -> a < tempThreshold).count() / (double) intraDistances.size();
+            double FRR = intraDistances.stream().filter(a -> a < tempThreshold).count() / (double) intraDistances.size();
 
-            if (FAR == FFR || smallestDistance == -1f || Math.abs(FAR - FFR) < smallestDistance) {
+            if (FAR == FRR || smallestDistance == -1f || Math.abs(FAR - FRR) < smallestDistance) {
                 EER = FAR * 100f;
-                smallestDistance = Math.abs(FAR - FFR);
+                smallestDistance = Math.abs(FAR - FRR);
+                finalThreshold = tempThreshold;
             }
-
-            if (FAR == FFR) {
+            if (FAR == FRR) {
                 break;
             }
         }
@@ -170,6 +163,7 @@ public class Main {
         // Prints the CCR and EER
         String results = "Correct Classification Rate (CCR) = " + (float) correctClassificationRate + "%"
                 + "\n" + "Equal Error Rate: " + (float) EER + "%"
+                + "\n" + "EER Threshold: " + (float) finalThreshold
                 + "\n" + "Duration: " + (endTime - startTime) + "ms";
 
         File resultsFile = new File(PATH + "\\results.txt");
@@ -303,29 +297,6 @@ public class Main {
             case 17, 18 -> trainingId == 63 || trainingId == 64;
             case 19, 20 -> trainingId == 65 || trainingId == 66;
             case 21, 22 -> trainingId == 87 || trainingId == 88;
-            default -> false;
-        };
-    }
-
-    /**
-     * Error rates check
-     * @param testingId Testing FV id
-     * @param trainingId Training FV id
-     * @return True if intra FVs
-     */
-    static boolean verificationCheck(int testingId, int trainingId) {
-        return switch (trainingId) {
-            case 47, 48 -> testingId == 1 || testingId == 2;
-            case 49, 50 -> testingId == 3 || testingId == 4;
-            case 51, 52 -> testingId == 5 || testingId == 6;
-            case 53, 54 -> testingId == 7 || testingId == 8;
-            case 55, 56 -> testingId == 9 || testingId == 10;
-            case 57, 58 -> testingId == 11 || testingId == 12;
-            case 59, 60 -> testingId == 13 || testingId == 14;
-            case 61, 62 -> testingId == 15 || testingId == 16;
-            case 63, 64 -> testingId == 17 || testingId == 18;
-            case 65, 66 -> testingId == 19 || testingId == 20;
-            case 87, 88 -> testingId == 21 || testingId == 22;
             default -> false;
         };
     }
