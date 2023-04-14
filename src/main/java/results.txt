@@ -1,3 +1,3 @@
 Correct Classification Rate (CCR) = 50.0%
 Equal Error Rate: 50.0%
-Duration: 545885ms
+Duration: 359409ms

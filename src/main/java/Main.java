@@ -122,6 +122,7 @@ public class Main {
         // Calculating the histogram of distances
         double correctClassificationRate = (correctCount / 22f) * 100f;
         ArrayList<Double> intraDistances = new ArrayList<>(), interDistances = new ArrayList<>();
+        StringBuilder histogram = new StringBuilder("idA,idB,distance,type\n");
 
         for (int i = 0; i < trainingImages.size(); i++) {
             for (int j = i; j < trainingImages.size(); j++) {
@@ -130,11 +131,14 @@ public class Main {
 
                 if (trainingImageA.getId() != trainingImageB.getId()) {
                     double distance = DoubleFVComparison.EUCLIDEAN.compare(pca.project(trainingImageA.getExtractedFeature()), pca.project(trainingImageB.getExtractedFeature()));
+                    histogram.append(trainingImageA.getId()).append(",").append(trainingImageB.getId()).append(",").append(distance);
 
                     if (verificationCheck(trainingImageA.getId(), trainingImageB.getId())) {
                         interDistances.add(distance);
+                        histogram.append(",inter\n");
                     } else {
                         intraDistances.add(distance);
+                        histogram.append(",intra\n");
                     }
                 }
             }
@@ -163,7 +167,7 @@ public class Main {
         }
         long endTime = System.currentTimeMillis();
 
-        // Prints the results
+        // Prints the CCR and EER
         String results = "Correct Classification Rate (CCR) = " + (float) correctClassificationRate + "%"
                 + "\n" + "Equal Error Rate: " + (float) EER + "%"
                 + "\n" + "Duration: " + (endTime - startTime) + "ms";
@@ -172,6 +176,12 @@ public class Main {
         FileWriter fileWriter = new FileWriter(resultsFile);
         fileWriter.write(results);
         fileWriter.close();
+
+        // Prints the histogram of distances
+        File histogramFile = new File(PATH + "\\histogram.csv");
+        FileWriter histogramWriter = new FileWriter(histogramFile);
+        histogramWriter.write(histogram.toString());
+        histogramWriter.close();
 
         System.out.println("\n" + results);
     }
